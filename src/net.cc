@@ -510,6 +510,8 @@ ncclResult_t ncclNetPluginLoad(struct ncclComm* comm) {
       INFO(NCCL_INIT|NCCL_NET, "NET/Plugin: Loaded collnet plugin %s (v7)", ncclCollNets[0]->name);
     }
   }
+  ncclCollNets[1] = ncclCollNets[0];
+  ncclCollNets[2] = ncclCollNets[0];
 
   ++netPluginRefCount;
   netPluginStatus = netPluginLoadSuccess;
@@ -573,6 +575,7 @@ static ncclResult_t netGetState(int i, enum ncclNetState* state) {
   if (ncclNetStates[i] == ncclNetStateInit) {
     int ndev;
     if (ncclNets[i]->init(ncclDebugLog) != ncclSuccess) ncclNetStates[i] = ncclNetStateDisabled;
+    else if (ncclNets[i]->devices == nullptr) ncclNetStates[i] = ncclNetStateDisabled;
     else if (ncclNets[i]->devices(&ndev) != ncclSuccess || ndev <= 0) ncclNetStates[i] = ncclNetStateDisabled;
     else ncclNetStates[i] = ncclNetStateEnabled;
   }
