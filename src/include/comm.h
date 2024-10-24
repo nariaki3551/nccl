@@ -424,7 +424,7 @@ struct ncclComm {
   bool initAlgoChannels[NCCL_NUM_ALGORITHMS];
   bool runtimeConn; // if dynamic connection is supported
   bool directMode;
-  int cuMemSupport;
+  // int cuMemSupport;
 
   uint64_t magic; // Magic number for all network communication. Not a security key -- only goal is to detect mismatches.
 
