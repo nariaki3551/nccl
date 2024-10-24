@@ -86,7 +86,7 @@ ncclResult_t ncclTopoPreset(struct ncclComm* comm, struct ncclTopoGraph** graphs
       topoRanks->nvlsHeads[topoRanks->nvlsHeadNum++] = nvlsIntra[0];
     }
   }
-  memcpy(comm->nvlsHeads, topoRanks->nvlsHeads, sizeof(int) * topoRanks->nvlsHeadNum);
+  // memcpy(comm->nvlsHeads, topoRanks->nvlsHeads, sizeof(int) * topoRanks->nvlsHeadNum);
 
   return ncclSuccess;
 }

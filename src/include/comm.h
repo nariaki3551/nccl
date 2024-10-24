@@ -469,7 +469,7 @@ struct ncclComm {
   int collChannels; // enqueue nChannels
   // int nvlsChannels; // enqueue nChannels
   // all nvls heads stored to check if we can splitShare
-  int nvlsHeads[MAXCHANNELS];
+  // int nvlsHeads[MAXCHANNELS];
   // Channels (per peer) for p2p
   int p2pnChannels;
   int p2pnChannelsPerPeer;
