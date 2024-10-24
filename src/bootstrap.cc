@@ -558,11 +558,11 @@ static ncclResult_t ringAllInfo(struct ncclComm* comm, struct bootstrapState* st
   NCCLCHECK(ncclCalloc(&ringData, nRanks));
   // pack
   // if (peerAddresss)
-  //   memcpy(&(ringData[rank].peerAddress), peerAddresss + rank, sizeof(union ncclSocketAddress));
+    // memcpy(&(ringData[rank].peerAddress), peerAddresss + rank, sizeof(union ncclSocketAddress));
   if (peerProxy)
     memcpy(&(ringData[rank].peerProxy), peerProxy + rank, sizeof(union ncclSocketAddress));
-  if (peerUDS)
-    memcpy(&(ringData[rank].peerUDS), peerUDS + rank, sizeof(uint64_t));
+  // if (peerUDS)
+  //   memcpy(&(ringData[rank].peerUDS), peerUDS + rank, sizeof(uint64_t));
 
   // allgather
   NCCLCHECKGOTO(bootstrapAllGather(state, ringData, sizeof(struct bootstrapRingData)), res, exit);
