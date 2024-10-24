@@ -226,7 +226,7 @@ static ncclResult_t socketSendRecv(struct ncclSocket* sendSock, void* sendData, 
 
 union ringConnectInfo {
   union ncclSocketAddress addr;
-  char handle[NCCL_NET_HANDLE_MAXSIZE];
+  // char handle[NCCL_NET_HANDLE_MAXSIZE];
 };
 
 struct extInfo {
@@ -628,15 +628,15 @@ ncclResult_t bootstrapInit(int nHandles, void* handles, struct ncclComm* comm) {
   // get the ring connection info
   memset(&nextPeer, 0, sizeof(union ringConnectInfo));
   BOOTSTRAP_PROF_OPEN(timers[BOOTSTRAP_INIT_TIME_CREATE]);
-  if (ncclParamBootstrapNetEnable()) {
-    // Create net interface for other ranks to contact me (all gather)
-    NCCLCHECK(netGetDevice(rank, comm, &STATE_LISTEN(state, net.dev)));
-    NCCLCHECK(state->net->listen(STATE_LISTEN(state, net.dev), STATE_LISTEN(state, net.handle), &STATE_LISTEN(state, net.comm)));
-    memcpy(info.connectInfo.handle, STATE_LISTEN(state, net.handle), NCCL_NET_HANDLE_MAXSIZE);
-  } else {
+  // if (ncclParamBootstrapNetEnable()) {
+  //   // Create net interface for other ranks to contact me (all gather)
+  //   NCCLCHECK(netGetDevice(rank, comm, &STATE_LISTEN(state, net.dev)));
+  //   NCCLCHECK(state->net->listen(STATE_LISTEN(state, net.dev), STATE_LISTEN(state, net.handle), &STATE_LISTEN(state, net.comm)));
+  //   memcpy(info.connectInfo.handle, STATE_LISTEN(state, net.handle), NCCL_NET_HANDLE_MAXSIZE);
+  // } else {
     // create socket for ring neightbor to contact mee
     NCCLCHECK(createListenSocket(comm, comm->magic, &STATE_LISTEN(state, socket), &info.connectInfo.addr, ncclSocketTypeBootstrap));
-  }
+  // }
   // Create socket for root to contact me using the root's magic
   int curr_root = rootIdFromRank(rank, nranks, nHandles);
   NCCLCHECK(createListenSocket(comm, BOOTSTRAP_HANDLE(handles, curr_root)->magic, &listenSockRoot, &info.listenRootAddress, ncclSocketTypeBootstrap));
@@ -684,13 +684,13 @@ ncclResult_t bootstrapInit(int nHandles, void* handles, struct ncclComm* comm) {
   BOOTSTRAP_PROF_CLOSE(timers[BOOTSTRAP_INIT_TIME_RECV]);
 
   // accept and connect the ring network
-  if (ncclParamBootstrapNetEnable()) {
-    NCCLCHECK(netRingConnect(state->net, &state->listen, nextPeer.handle,
-                             &STATE_RING(state, net.sendComm), &STATE_RING(state, net.sendDevHandle),
-                             &STATE_RING(state, net.recvComm), &STATE_RING(state, net.recvDevHandle), state->abortFlag));
-  } else {
+  // if (ncclParamBootstrapNetEnable()) {
+  //   NCCLCHECK(netRingConnect(state->net, &state->listen, nextPeer.handle,
+  //                            &STATE_RING(state, net.sendComm), &STATE_RING(state, net.sendDevHandle),
+  //                            &STATE_RING(state, net.recvComm), &STATE_RING(state, net.recvDevHandle), state->abortFlag));
+  // } else {
     NCCLCHECK(socketRingConnect(&nextPeer.addr, &STATE_RING(state, socket.send), &STATE_LISTEN(state, socket), &STATE_RING(state, socket.recv), comm->magic, state->abortFlag));
-  }
+  // }
 
   // AllGather all listen handlers
   // in case of failure, those resources will be free'd when calling bootstrapDestroy, so we can return immediatly
@@ -749,14 +749,14 @@ ncclResult_t bootstrapSplit(uint64_t magic, struct ncclComm* comm, struct ncclCo
   next = parentRanks[(rank + 1) % nranks];
 
   // create a handle for the others to reach out to me
-  if (ncclParamBootstrapNetEnable()) {
-    NCCLCHECKGOTO(netGetDevice(rank, comm, &STATE_LISTEN(state, net.dev)), ret, fail);
-    NCCLCHECKGOTO(state->net->listen(STATE_LISTEN(state, net.dev), STATE_LISTEN(state, net.handle), &STATE_LISTEN(state, net.comm)), ret, fail);
-    memcpy(info.handle, STATE_LISTEN(state, net.handle), NCCL_NET_HANDLE_MAXSIZE);
-  } else {
+  // if (ncclParamBootstrapNetEnable()) {
+  //   NCCLCHECKGOTO(netGetDevice(rank, comm, &STATE_LISTEN(state, net.dev)), ret, fail);
+  //   NCCLCHECKGOTO(state->net->listen(STATE_LISTEN(state, net.dev), STATE_LISTEN(state, net.handle), &STATE_LISTEN(state, net.comm)), ret, fail);
+  //   memcpy(info.handle, STATE_LISTEN(state, net.handle), NCCL_NET_HANDLE_MAXSIZE);
+  // } else {
     // create socket for ring neightbor to contact mee
     NCCLCHECK(createListenSocket(comm, comm->magic, &STATE_LISTEN(state, socket), &info.addr, ncclSocketTypeBootstrap));
-  }
+  // }
   // create a socket for others to reach out (P2P)
   union ncclSocketAddress peerSocketAddress;
   NCCLCHECK(createListenSocket(comm, comm->magic, &STATE_LISTEN(state, peerSocket), &peerSocketAddress, ncclSocketTypeBootstrap));
@@ -764,14 +764,14 @@ ncclResult_t bootstrapSplit(uint64_t magic, struct ncclComm* comm, struct ncclCo
   // Get addr from next rank using the parent's connections
   NCCLCHECKGOTO(bootstrapSend(parent->bootstrap, prev, BOOTSTRAP_TAG_COMMSPLIT, &info, sizeof(union ringConnectInfo)), ret, fail);
   NCCLCHECKGOTO(bootstrapRecv(parent->bootstrap, next, BOOTSTRAP_TAG_COMMSPLIT, &nextPeer, sizeof(union ringConnectInfo)), ret, fail);
-  if (ncclParamBootstrapNetEnable()) {
-    NCCLCHECKGOTO(netRingConnect(state->net, &state->listen, nextPeer.handle,
-                                 &STATE_RING(state, net.sendComm), &STATE_RING(state, net.sendDevHandle),
-                                 &STATE_RING(state, net.recvComm), &STATE_RING(state, net.recvDevHandle), state->abortFlag),
-                  ret, fail);
-  } else {
+  // if (ncclParamBootstrapNetEnable()) {
+  //   NCCLCHECKGOTO(netRingConnect(state->net, &state->listen, nextPeer.handle,
+  //                                &STATE_RING(state, net.sendComm), &STATE_RING(state, net.sendDevHandle),
+  //                                &STATE_RING(state, net.recvComm), &STATE_RING(state, net.recvDevHandle), state->abortFlag),
+  //                 ret, fail);
+  // } else {
     NCCLCHECK(socketRingConnect(&nextPeer.addr, &STATE_RING(state, socket.send), &STATE_LISTEN(state, socket), &STATE_RING(state, socket.recv), comm->magic, state->abortFlag));
-  }
+  // }
 
   NCCLCHECKGOTO(ncclCalloc(&state->peerP2pAddresses, nranks * sizeof(union ncclSocketAddress)), ret, fail);
   memcpy(state->peerP2pAddresses + rank, &peerSocketAddress, sizeof(union ncclSocketAddress));
