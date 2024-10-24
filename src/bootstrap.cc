@@ -698,8 +698,8 @@ ncclResult_t bootstrapInit(int nHandles, void* handles, struct ncclComm* comm) {
   NCCLCHECK(ncclCalloc(&proxySocket, 1));
   NCCLCHECK(createListenSocket(comm, comm->magic, proxySocket, state->peerProxyAddresses + rank, ncclSocketTypeProxy));
 
-  NCCLCHECK(ncclCalloc(&state->peerProxyAddressesUDS, nranks));
-  NCCLCHECK(getUDS(state->peerProxyAddressesUDS + rank));
+  // NCCLCHECK(ncclCalloc(&state->peerProxyAddressesUDS, nranks));
+  // NCCLCHECK(getUDS(state->peerProxyAddressesUDS + rank));
 
   // // create a socket for others to reach out (P2P)
   // union ncclSocketAddress peerSocketAddress;
