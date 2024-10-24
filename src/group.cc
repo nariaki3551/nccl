@@ -438,7 +438,7 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_, ncclSimInfo_t* simInf
       CUDACHECKGOTO(cudaSetDevice(comm->cudaDev), ret, fail);
       NCCLCHECKGOTO(ncclPrepareTasks(comm, algoNeedConnect, &needConnect, simInfo), ret, fail);
 
-      if (comm->cuMemSupport && needConnect) {
+      if (needConnect) {
         struct ncclPreconnectJob* job;
         NCCLCHECKGOTO(ncclCalloc(&job, 1), ret, fail);
         job->base.func = ncclCollPreconnectFunc;

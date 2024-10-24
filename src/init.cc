@@ -769,7 +769,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   NCCLCHECKGOTO(fillInfo(comm, comm->peerInfo+rank, comm->commHash), ret, fail);
   NCCLCHECKGOTO(bootstrapAllGather(comm->bootstrap, comm->peerInfo, sizeof(struct ncclPeerInfo)), ret, fail);
 
-  comm->cuMemSupport = 1;
+  // comm->cuMemSupport = 1;
   // for (int i = 0; i < nranks; i++) {
   //   if (comm->peerInfo[i].version != comm->peerInfo[rank].version) {
   //     WARN("Mismatched NCCL version detected : rank %d version %d rank %d version %d",
@@ -790,12 +790,12 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   timers[TIMER_INIT_ALLGATHER] = clockNano() - timers[TIMER_INIT_ALLGATHER];
 
   // MNNVL support
-  if (nNodes > 1 && !checkMNNVL(comm) && ncclParamMNNVLEnable() == 1) {
-    // Return an error if the user specifically requested MNNVL support
-    WARN("MNNVL is not supported on this system");
-    ret = ncclSystemError;
-    goto fail;
-  }
+  // if (nNodes > 1 && !checkMNNVL(comm) && ncclParamMNNVLEnable() == 1) {
+  //   // Return an error if the user specifically requested MNNVL support
+  //   WARN("MNNVL is not supported on this system");
+  //   ret = ncclSystemError;
+  //   goto fail;
+  // }
 
   do {
     // Compute intra-process ranks
@@ -817,15 +817,15 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
         }
       }
 
-      if (comm->nvlsRegSupport) {
-        for (int j = i + 1; j < nranks; j++) {
-          if (comm->peerInfo[i].hostHash == comm->peerInfo[j].hostHash &&
-            comm->peerInfo[i].pidHash == comm->peerInfo[j].pidHash) {
-            comm->nvlsRegSupport = 0;
-            break;
-          }
-        }
-      }
+      // if (comm->nvlsRegSupport) {
+      //   for (int j = i + 1; j < nranks; j++) {
+      //     if (comm->peerInfo[i].hostHash == comm->peerInfo[j].hostHash &&
+      //       comm->peerInfo[i].pidHash == comm->peerInfo[j].pidHash) {
+      //       comm->nvlsRegSupport = 0;
+      //       break;
+      //     }
+      //   }
+      // }
     }
 
     // Buffer Registration is not supported with MNNVL
@@ -1188,7 +1188,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     }
   } while (0);
 
-  comm->runtimeConn = comm->cuMemSupport && ncclParamRuntimeConnect();
+  comm->runtimeConn = ncclParamRuntimeConnect();
   if (comm->runtimeConn) {
     for (int c=0; c<comm->nChannels; c++) {
       NCCLCHECKGOTO(setupChannel(comm, c, rank, nranks, rings+c*nranks), ret, fail);
