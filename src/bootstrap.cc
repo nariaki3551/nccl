@@ -557,10 +557,10 @@ static ncclResult_t ringAllInfo(struct ncclComm* comm, struct bootstrapState* st
 
   NCCLCHECK(ncclCalloc(&ringData, nRanks));
   // pack
-  // if (peerAddresss)
-    // memcpy(&(ringData[rank].peerAddress), peerAddresss + rank, sizeof(union ncclSocketAddress));
-  if (peerProxy)
-    memcpy(&(ringData[rank].peerProxy), peerProxy + rank, sizeof(union ncclSocketAddress));
+  // if (peerAddresss
+  //   memcpy(&(ringData[rank].peerAddress), peerAddresss + rank, sizeof(union ncclSocketAddress));
+  // if (peerProxy)
+  //   memcpy(&(ringData[rank].peerProxy), peerProxy + rank, sizeof(union ncclSocketAddress));
   // if (peerUDS)
   //   memcpy(&(ringData[rank].peerUDS), peerUDS + rank, sizeof(uint64_t));
 
@@ -568,14 +568,14 @@ static ncclResult_t ringAllInfo(struct ncclComm* comm, struct bootstrapState* st
   NCCLCHECKGOTO(bootstrapAllGather(state, ringData, sizeof(struct bootstrapRingData)), res, exit);
 
   // unpack
-  for (int irank = 0; irank < nRanks; ++irank) {
-    if (peerAddresss)
-      memcpy(peerAddresss + irank, &(ringData[irank].peerAddress), sizeof(union ncclSocketAddress));
-    if (peerProxy)
-      memcpy(peerProxy + irank, &(ringData[irank].peerProxy), sizeof(union ncclSocketAddress));
-    if (peerUDS)
-      memcpy(peerUDS + irank, &(ringData[irank].peerUDS), sizeof(uint64_t));
-  }
+  // for (int irank = 0; irank < nRanks; ++irank) {
+  //   if (peerAddresss)
+  //     memcpy(peerAddresss + irank, &(ringData[irank].peerAddress), sizeof(union ncclSocketAddress));
+  //   if (peerProxy)
+  //     memcpy(peerProxy + irank, &(ringData[irank].peerProxy), sizeof(union ncclSocketAddress));
+  //   if (peerUDS)
+  //     memcpy(peerUDS + irank, &(ringData[irank].peerUDS), sizeof(uint64_t));
+  // }
 
 exit:
   free(ringData);
