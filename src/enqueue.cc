@@ -718,8 +718,8 @@ static ncclResult_t scheduleCollTasksToPlan(
   int nPlanColls = 0;
   size_t trafficBytes[2*2] = {0, 0, 0, 0}; // [collnet][nvls]
   int nChannels[2*2] = {0, 0, 0, 0}; // [collnet][nvls]
-  int const nMaxChannels[2*2] = {comm->nChannels, comm->nvlsChannels, // [collnet][nvls]
-                                 comm->nChannels, comm->nvlsChannels};
+  int const nMaxChannels[2*2] = {comm->nChannels, -1, // [collnet][nvls]
+                                 comm->nChannels, -1};
   constexpr size_t MinTrafficPerChannel = 16 << 10; // 16K traffic as minimal
   do {
     size_t workBytes = 0;
@@ -1887,9 +1887,9 @@ static ncclResult_t topoGetAlgoInfo(
       }
       ncSwitch /= 2;
     }
-  } else if (info->algorithm == NCCL_ALGO_NVLS || info->algorithm == NCCL_ALGO_NVLS_TREE) {
-    // NVLS should not need more than 16 channels to get peak BW.
-    nc = comm->nvlsChannels;
+  // } else if (info->algorithm == NCCL_ALGO_NVLS || info->algorithm == NCCL_ALGO_NVLS_TREE) {
+  //   // NVLS should not need more than 16 channels to get peak BW.
+  //   nc = comm->nvlsChannels;
   } else {
     // Ring/Tree channel tuning
     while (nBytes < nc * nt * threadThreshold) {

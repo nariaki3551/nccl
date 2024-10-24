@@ -1061,7 +1061,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     }
   }
   if (graphs[NCCL_ALGO_COLLNET_CHAIN]->nChannels == 0) comm->collNetSupport = 0;
-  if (graphs[NCCL_ALGO_NVLS]->nChannels == 0) comm->nvlsSupport = comm->nvlsChannels = 0;
+  // if (graphs[NCCL_ALGO_NVLS]->nChannels == 0) comm->nvlsSupport = comm->nvlsChannels = 0;
 
   comm->nChannels = treeGraph->nChannels = ringGraph->nChannels = std::min(treeGraph->nChannels, ringGraph->nChannels);
   if (comm->nChannels < nChannelsOrig) {
@@ -1272,7 +1272,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   // Compute time models for algorithm and protocol combinations
   NCCLCHECKGOTO(ncclTopoTuneModel(comm, comm->minCompCap, comm->maxCompCap, graphs), ret, fail);
 
-  INFO(NCCL_INIT, "%d coll channels, %d collnet channels, %d nvls channels, %d p2p channels, %d p2p channels per peer", comm->nChannels, comm->nChannels, comm->nvlsChannels, comm->p2pnChannels, comm->p2pnChannelsPerPeer);
+  INFO(NCCL_INIT, "%d coll channels, %d collnet channels, %d nvls channels, %d p2p channels, %d p2p channels per peer", comm->nChannels, comm->nChannels, -1, comm->p2pnChannels, comm->p2pnChannelsPerPeer);
 
   if (comm->intraRank == 0) { // Load ncclParamLaunchMode
     const char* str = ncclGetEnv("NCCL_LAUNCH_MODE");

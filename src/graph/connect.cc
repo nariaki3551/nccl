@@ -239,87 +239,87 @@ static ncclResult_t connectCollNet(struct ncclComm* comm, struct ncclTopoGraph* 
   return ncclSuccess;
 }
 
-static ncclResult_t connectNvls(struct ncclComm* comm, int* nvlsHeads, int nHeads) {
-  int headRank = -1;
-  if (nHeads == 0) {
-    comm->nvlsChannels = 0;
-    return ncclSuccess;
-  }
+// static ncclResult_t connectNvls(struct ncclComm* comm, int* nvlsHeads, int nHeads) {
+//   int headRank = -1;
+//   if (nHeads == 0) {
+//     comm->nvlsChannels = 0;
+//     return ncclSuccess;
+//   }
 
-  for (int h = 0; h < nHeads; h++) {
-    if (nvlsHeads[h * comm->nNodes + comm->node] == comm->rank) headRank = h;
-  }
+//   for (int h = 0; h < nHeads; h++) {
+//     if (nvlsHeads[h * comm->nNodes + comm->node] == comm->rank) headRank = h;
+//   }
 
-  for (int c=0; c<comm->nChannels; c++) {
-    struct ncclChannel* channel = comm->channels+c;
-    channel->nvls.nHeads = nHeads;
-    for (int h=0; h<nHeads; h++) channel->nvls.up[h] = comm->nRanks+1+h;
-    for (int h=nHeads; h<NCCL_MAX_NVLS_ARITY; h++) channel->nvls.up[h] = -1;
-    channel->nvls.down = comm->nRanks+1+headRank;
-    channel->nvls.out = -1;       // NVLS+SHARP not yet implemented.
-    channel->nvls.headRank = headRank;
-    channel->nvls.treeUp = channel->nvls.treeDown[0] = channel->nvls.treeDown[1] = channel->nvls.treeDown[2] = -1;
-    channel->nvls.node = comm->node;
-    channel->nvls.nNodes = comm->nNodes;
-    if (comm->collNetSupport && channel->nvls.headRank != -1) channel->nvls.out = comm->nRanks;
-  }
-  if (comm->nNodes == 1) return ncclSuccess;
+//   for (int c=0; c<comm->nChannels; c++) {
+//     struct ncclChannel* channel = comm->channels+c;
+//     channel->nvls.nHeads = nHeads;
+//     for (int h=0; h<nHeads; h++) channel->nvls.up[h] = comm->nRanks+1+h;
+//     for (int h=nHeads; h<NCCL_MAX_NVLS_ARITY; h++) channel->nvls.up[h] = -1;
+//     channel->nvls.down = comm->nRanks+1+headRank;
+//     channel->nvls.out = -1;       // NVLS+SHARP not yet implemented.
+//     channel->nvls.headRank = headRank;
+//     channel->nvls.treeUp = channel->nvls.treeDown[0] = channel->nvls.treeDown[1] = channel->nvls.treeDown[2] = -1;
+//     channel->nvls.node = comm->node;
+//     channel->nvls.nNodes = comm->nNodes;
+//     if (comm->collNetSupport && channel->nvls.headRank != -1) channel->nvls.out = comm->nRanks;
+//   }
+//   if (comm->nNodes == 1) return ncclSuccess;
 
-  // Connect Trees
-  int tree0Parent, tree0Child0, tree0Child1, tree1Parent, tree1Child0, tree1Child1;
-  int pc0, pc1; // ignored
-  NCCLCHECK(ncclGetDtree(comm->nNodes, comm->node,
-        &tree0Parent, &tree0Child0, &tree0Child1, &pc0,
-        &tree1Parent, &tree1Child0, &tree1Child1, &pc1));
+//   // Connect Trees
+//   int tree0Parent, tree0Child0, tree0Child1, tree1Parent, tree1Child0, tree1Child1;
+//   int pc0, pc1; // ignored
+//   NCCLCHECK(ncclGetDtree(comm->nNodes, comm->node,
+//         &tree0Parent, &tree0Child0, &tree0Child1, &pc0,
+//         &tree1Parent, &tree1Child0, &tree1Child1, &pc1));
 
-  int* heads = NULL;
-  int treeUp[2] = { -1, -1 };
-  int treeDown0[2] = { -1, -1 };
-  int treeDown1[2] = { -1, -1 };
+//   int* heads = NULL;
+//   int treeUp[2] = { -1, -1 };
+//   int treeDown0[2] = { -1, -1 };
+//   int treeDown1[2] = { -1, -1 };
 
-  if (comm->node == 0) {
-    for (int h=0; h<nHeads; h++) {
-      char line[1024];
-      sprintf(line, "NVLS Head %2d:", h);
-      heads = nvlsHeads+h*comm->nNodes;
-      for (int n=0; n<comm->nNodes && n<20; n++) {
-        sprintf(line+strlen(line), " %2d", heads[n]);
-      }
-      INFO(NCCL_INIT, "%s", line);
-    }
-  }
+//   if (comm->node == 0) {
+//     for (int h=0; h<nHeads; h++) {
+//       char line[1024];
+//       sprintf(line, "NVLS Head %2d:", h);
+//       heads = nvlsHeads+h*comm->nNodes;
+//       for (int n=0; n<comm->nNodes && n<20; n++) {
+//         sprintf(line+strlen(line), " %2d", heads[n]);
+//       }
+//       INFO(NCCL_INIT, "%s", line);
+//     }
+//   }
 
-  // Find the heads where I'm the head rank and retain tree up/down
-  for (int h=0; h<nHeads; h++) {
-    heads = nvlsHeads+h*comm->nNodes;
-    if (heads[comm->node] == comm->rank) {
-      treeUp[0] = tree0Parent == -1 ? -1: heads[tree0Parent];
-      treeDown0[0] = tree0Child0 == -1 ? -1 : heads[tree0Child0];
-      treeDown1[0] = tree0Child1 == -1 ? -1 : heads[tree0Child1];
-      treeUp[1] = tree1Parent == -1 ? -1 : heads[tree1Parent];
-      treeDown0[1] = tree1Child0 == -1 ? -1 : heads[tree1Child0];
-      treeDown1[1] = tree1Child1 == -1 ? -1 : heads[tree1Child1];
-      break;
-    }
-  }
-  // Set prev/next in all channels (NVLS compute channels work
-  // orthogonally to NVLS search channels).
-  for (int c=0; c<comm->nChannels; c++) {
-    struct ncclChannel* channel = comm->channels+c;
-    channel->nvls.treeUp = treeUp[c%2];
-    channel->nvls.treeDown[0] = channel->nvls.down;
-    int ix = 1;
-    if (treeDown0[c%2] != -1) channel->nvls.treeDown[ix++] = treeDown0[c%2];
-    if (treeDown1[c%2] != -1) channel->nvls.treeDown[ix] = treeDown1[c%2];
-  }
+//   // Find the heads where I'm the head rank and retain tree up/down
+//   for (int h=0; h<nHeads; h++) {
+//     heads = nvlsHeads+h*comm->nNodes;
+//     if (heads[comm->node] == comm->rank) {
+//       treeUp[0] = tree0Parent == -1 ? -1: heads[tree0Parent];
+//       treeDown0[0] = tree0Child0 == -1 ? -1 : heads[tree0Child0];
+//       treeDown1[0] = tree0Child1 == -1 ? -1 : heads[tree0Child1];
+//       treeUp[1] = tree1Parent == -1 ? -1 : heads[tree1Parent];
+//       treeDown0[1] = tree1Child0 == -1 ? -1 : heads[tree1Child0];
+//       treeDown1[1] = tree1Child1 == -1 ? -1 : heads[tree1Child1];
+//       break;
+//     }
+//   }
+//   // Set prev/next in all channels (NVLS compute channels work
+//   // orthogonally to NVLS search channels).
+//   for (int c=0; c<comm->nChannels; c++) {
+//     struct ncclChannel* channel = comm->channels+c;
+//     channel->nvls.treeUp = treeUp[c%2];
+//     channel->nvls.treeDown[0] = channel->nvls.down;
+//     int ix = 1;
+//     if (treeDown0[c%2] != -1) channel->nvls.treeDown[ix++] = treeDown0[c%2];
+//     if (treeDown1[c%2] != -1) channel->nvls.treeDown[ix] = treeDown1[c%2];
+//   }
 
-  struct ncclNvls* nvls0 = &comm->channels[0].nvls;
-  struct ncclNvls* nvls1 = &comm->channels[1].nvls;
-  INFO(NCCL_GRAPH, "NVLS Trees : %d/%d/%d->%d->%d %d/%d/%d->%d->%d",
-      nvls0->treeDown[0], nvls0->treeDown[1], nvls0->treeDown[2], comm->rank, nvls0->treeUp,
-      nvls1->treeDown[0], nvls1->treeDown[1], nvls1->treeDown[2], comm->rank, nvls1->treeUp);
-  return ncclSuccess;
-}
+//   struct ncclNvls* nvls0 = &comm->channels[0].nvls;
+//   struct ncclNvls* nvls1 = &comm->channels[1].nvls;
+//   INFO(NCCL_GRAPH, "NVLS Trees : %d/%d/%d->%d->%d %d/%d/%d->%d->%d",
+//       nvls0->treeDown[0], nvls0->treeDown[1], nvls0->treeDown[2], comm->rank, nvls0->treeUp,
+//       nvls1->treeDown[0], nvls1->treeDown[1], nvls1->treeDown[2], comm->rank, nvls1->treeUp);
+//   return ncclSuccess;
+// }
 
 // Legacy naming
 NCCL_PARAM(MinNrings, "MIN_NRINGS", -2);
@@ -490,13 +490,13 @@ ncclResult_t ncclTopoPostset(struct ncclComm* comm, int* firstRanks, int* treePa
   comm->collChannels = comm->nChannels;
 #if CUDART_VERSION >= 12010
   // Support maximal channel usage for aggregation
-  if (shared && comm->nvlsChannels > parent->nvlsResources->nChannels) {
-    comm->nvlsChannels = parent->nvlsResources->nChannels;
-  }
-  if (comm->nChannels < comm->nvlsChannels) {
-    nChannels = comm->nChannels = copyChannels(comm, comm->nChannels, comm->nvlsChannels, ringPrev, ringNext);
-  }
-  NCCLCHECKGOTO(connectNvls(comm, nvlsHeads, minHeadNum), ret, fail);
+  // if (shared && comm->nvlsChannels > parent->nvlsResources->nChannels) {
+  //   comm->nvlsChannels = parent->nvlsResources->nChannels;
+  // }
+  // if (comm->nChannels < comm->nvlsChannels) {
+  //   nChannels = comm->nChannels = copyChannels(comm, comm->nChannels, comm->nvlsChannels, ringPrev, ringNext);
+  // }
+  // NCCLCHECKGOTO(connectNvls(comm, nvlsHeads, minHeadNum), ret, fail);
 #endif
   if (shared && comm->nChannels > parent->sharedRes->tpNChannels) {
     nChannels = comm->nChannels = parent->sharedRes->tpNChannels;
