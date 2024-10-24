@@ -440,8 +440,8 @@ struct ncclComm {
   cpu_set_t cpuAffinity; // CPU affinity of the GPU
   int cudaArch; // matches __CUDA_ARCH__ of device
 
-  int cpuArch;   // architecture - As defined in src/include/graph.h, e.g. x86/arm/ppc/mixed
-  int cpuVendor; // vendor - As defined in src/include/graph.h
+  // int cpuArch;   // architecture - As defined in src/include/graph.h, e.g. x86/arm/ppc/mixed
+  // int cpuVendor; // vendor - As defined in src/include/graph.h
 
   int node;
   int nNodes;

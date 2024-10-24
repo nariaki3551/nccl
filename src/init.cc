@@ -862,7 +862,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   // Init search
   NCCLCHECKGOTO(ncclTopoSearchInit(comm->topo), ret, fail);
   // Decide on comm's CPU architecture.
-  NCCLCHECKGOTO(ncclTopoComputeCommCPU(comm), ret, fail);
+  // NCCLCHECKGOTO(ncclTopoComputeCommCPU(comm), ret, fail);
   // Print final topology
   NCCLCHECKGOTO(ncclTopoPrint(comm->topo), ret, fail);
   timers[TIMER_INIT_TOPO] = clockNano() - timers[TIMER_INIT_TOPO];
@@ -963,8 +963,8 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     allGather3Data[rank].graphInfo[a].crossNic = graphs[a]->crossNic;
   }
 
-  allGather3Data[rank].cpuArch = comm->cpuArch;
-  allGather3Data[rank].cpuVendor = comm->cpuVendor;
+  // allGather3Data[rank].cpuArch = comm->cpuArch;
+  // allGather3Data[rank].cpuVendor = comm->cpuVendor;
 
   comm->nChannels = std::min(treeGraph->nChannels, ringGraph->nChannels);
   NCCLCHECKGOTO(ncclTopoPreset(comm, graphs, &allGather3Data[rank].topoRanks), ret, fail);
@@ -987,26 +987,26 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     }
     comm->rankToNode[r] = node;
 
-    if (comm->cpuArch != allGather3Data[r].cpuArch &&
-        comm->cpuArch != NCCL_TOPO_CPU_ARCH_MIXED) {
-      comm->cpuArch = NCCL_TOPO_CPU_ARCH_MIXED;
-    }
-    if (comm->cpuVendor != allGather3Data[r].cpuVendor &&
-        comm->cpuVendor != NCCL_TOPO_CPU_VENDOR_MIXED) {
-      comm->cpuVendor = NCCL_TOPO_CPU_VENDOR_MIXED;
-    }
+    // if (comm->cpuArch != allGather3Data[r].cpuArch &&
+    //     comm->cpuArch != NCCL_TOPO_CPU_ARCH_MIXED) {
+    //   comm->cpuArch = NCCL_TOPO_CPU_ARCH_MIXED;
+    // }
+    // if (comm->cpuVendor != allGather3Data[r].cpuVendor &&
+    //     comm->cpuVendor != NCCL_TOPO_CPU_VENDOR_MIXED) {
+    //   comm->cpuVendor = NCCL_TOPO_CPU_VENDOR_MIXED;
+    // }
   }
 
   // Alert the user to the presence of mixed CPUs. In the past this has caused
   // locks in some collective routines. This may help debug issues in the future.
-  if (rank==0) {
-    if (comm->cpuArch == NCCL_TOPO_CPU_ARCH_MIXED) {
-      INFO(NCCL_GRAPH, "CPUs with mixed architecture were detected.");
-    }
-    if (comm->cpuVendor == NCCL_TOPO_CPU_VENDOR_MIXED) {
-      INFO(NCCL_GRAPH, "CPUs with mixed vendors were detected.");
-    }
-  }
+  // if (rank==0) {
+  //   if (comm->cpuArch == NCCL_TOPO_CPU_ARCH_MIXED) {
+  //     INFO(NCCL_GRAPH, "CPUs with mixed architecture were detected.");
+  //   }
+  //   if (comm->cpuVendor == NCCL_TOPO_CPU_VENDOR_MIXED) {
+  //     INFO(NCCL_GRAPH, "CPUs with mixed vendors were detected.");
+  //   }
+  // }
 
   // Now that we know nNodes, alloc nodeRanks and compute localRanks for each node
   NCCLCHECKGOTO(ncclCalloc(&comm->nodeRanks, comm->nNodes), ret, fail);

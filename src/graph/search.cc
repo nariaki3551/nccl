@@ -52,14 +52,14 @@ ncclResult_t ncclTopoSearchInit(struct ncclTopoSystem* system) {
   return ncclSuccess;
 }
 
-ncclResult_t ncclTopoComputeCommCPU(struct ncclComm* comm) {
-  // We assume there is at least one CPU and that the CPUs have the same
-  // architecture and vendor.
-  const struct ncclTopoNodeSet* cpus = &comm->topo->nodes[CPU];
-  comm->cpuArch = cpus->nodes[0].cpu.arch;
-  comm->cpuVendor = cpus->nodes[0].cpu.vendor;
-  return ncclSuccess;
-}
+// ncclResult_t ncclTopoComputeCommCPU(struct ncclComm* comm) {
+//   // We assume there is at least one CPU and that the CPUs have the same
+//   // architecture and vendor.
+//   const struct ncclTopoNodeSet* cpus = &comm->topo->nodes[CPU];
+//   // comm->cpuArch = cpus->nodes[0].cpu.arch;
+//   // comm->cpuVendor = cpus->nodes[0].cpu.vendor;
+//   return ncclSuccess;
+// }
 
 static ncclResult_t findRevLink(struct ncclTopoNode* node1, struct ncclTopoNode* node2, int type, struct ncclTopoLink** revLink) {
   for (int l=0; l<node2->nlinks; l++) {
