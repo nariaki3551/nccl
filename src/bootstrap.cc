@@ -547,7 +547,7 @@ static ncclResult_t ringAllInfo(struct ncclComm* comm, struct bootstrapState* st
                                 union ncclSocketAddress* peerAddresss,
                                 union ncclSocketAddress* peerProxy, uint64_t* peerUDS) {
   ncclResult_t res = ncclSuccess;
-  int rank = comm->rank;
+  // int rank = comm->rank;
   int nRanks = comm->nRanks;
   struct bootstrapRingData {
     union ncclSocketAddress peerAddress;
@@ -701,11 +701,11 @@ ncclResult_t bootstrapInit(int nHandles, void* handles, struct ncclComm* comm) {
   NCCLCHECK(ncclCalloc(&state->peerProxyAddressesUDS, nranks));
   NCCLCHECK(getUDS(state->peerProxyAddressesUDS + rank));
 
-  // create a socket for others to reach out (P2P)
-  union ncclSocketAddress peerSocketAddress;
-  NCCLCHECK(createListenSocket(comm, comm->magic, &STATE_LISTEN(state, peerSocket), &peerSocketAddress, ncclSocketTypeBootstrap));
-  NCCLCHECK(ncclCalloc(&state->peerP2pAddresses, nranks * sizeof(union ncclSocketAddress)));
-  memcpy(state->peerP2pAddresses + rank, &peerSocketAddress, sizeof(union ncclSocketAddress));
+  // // create a socket for others to reach out (P2P)
+  // union ncclSocketAddress peerSocketAddress;
+  // NCCLCHECK(createListenSocket(comm, comm->magic, &STATE_LISTEN(state, peerSocket), &peerSocketAddress, ncclSocketTypeBootstrap));
+  // NCCLCHECK(ncclCalloc(&state->peerP2pAddresses, nranks * sizeof(union ncclSocketAddress)));
+  // memcpy(state->peerP2pAddresses + rank, &peerSocketAddress, sizeof(union ncclSocketAddress));
 
   // BOOTSTRAP_PROF_OPEN(timers[BOOTSTRAP_INIT_TIME_RING]);
   // NCCLCHECK(ringAllInfo(comm, state, state->peerP2pAddresses, state->peerProxyAddresses, state->peerProxyAddressesUDS));
