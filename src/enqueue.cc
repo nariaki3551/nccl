@@ -1841,6 +1841,22 @@ static ncclResult_t topoGetAlgoInfo(
   info->protocol = protocol;
   float time = minTime;
 
+  // if NCCL_ALGO environment variable is set as char, use it to override the algorithm
+  // and algo, NCCL_PROTO environment variable is set, use it to override the protocol
+  char* algoEnv = getenv("NCCL_ALGO");
+  // char* protoEnv = getenv("NCCL_PROTO");
+  if (algoEnv) {
+    if (strcmp(algoEnv, "CollnetDirect") == 0) {
+      info->algorithm = NCCL_ALGO_COLLNET_DIRECT;
+    }
+  }
+  // if (protoEnv) {
+  //   int proto = atoi(protoEnv);
+  //   if (proto >= 0 && proto < NCCL_NUM_PROTOCOLS) {
+  //     info->protocol = proto;
+  //   }
+  // }
+
   // Yes, we are first assigning and then testing if protocol is sane, but that's OK in this case.
   // coverity[check_after_sink]
   if (info->algorithm == NCCL_ALGO_UNDEF || info->protocol == NCCL_PROTO_UNDEF) {
