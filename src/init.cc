@@ -231,7 +231,7 @@ static ncclResult_t commFree(ncclComm_t comm) {
     }
   }
 
-  if (comm->nvlsSupport) NCCLCHECK(ncclNvlsFree(comm));
+  // if (comm->nvlsSupport) NCCLCHECK(ncclNvlsFree(comm));
 
   struct ncclDestructor* dtor = comm->destructorHead;
   while (dtor != nullptr) {
@@ -887,7 +887,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   }
 
   // Determine local Nvls support
-  NCCLCHECK(ncclNvlsInit(comm));
+  // NCCLCHECK(ncclNvlsInit(comm));
 
   timers[TIMER_INIT_GRAPHS] = clockNano();
   // Get rings and trees
@@ -1194,7 +1194,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
       NCCLCHECKGOTO(setupChannel(comm, c, rank, nranks, rings+c*nranks), ret, fail);
     }
     // Setup NVLS
-    NCCLCHECKGOTO(ncclNvlsSetup(comm, parent), ret, fail);
+    // NCCLCHECKGOTO(ncclNvlsSetup(comm, parent), ret, fail);
     // Check if we can setup CollNet
     if (comm->collNetSupport > 0) ncclCollNetSetup(comm, parent, graphs);
   } else {
@@ -1210,11 +1210,11 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     if (comm->maxLocalRanks == 1) NCCLCHECKGOTO(ncclTransportPatConnect(comm), ret, fail);
 
     // Setup NVLS
-    NCCLCHECKGOTO(ncclNvlsSetup(comm, parent), ret, fail);
-    NCCLCHECKGOTO(ncclNvlsBufferSetup(comm), ret, fail);
+    // NCCLCHECKGOTO(ncclNvlsSetup(comm, parent), ret, fail);
+    // NCCLCHECKGOTO(ncclNvlsBufferSetup(comm), ret, fail);
 
     // And NVLS trees if needed
-    NCCLCHECKGOTO(ncclNvlsTreeConnect(comm), ret, fail);
+    // NCCLCHECKGOTO(ncclNvlsTreeConnect(comm), ret, fail);
 
     // Check if we can setup CollNet
     if (comm->collNetSupport > 0) {

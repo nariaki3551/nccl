@@ -280,39 +280,39 @@ static ncclResult_t registerCollBuffers(
   if (!(ncclParamLocalRegister() || (comm->planner.persistent && ncclParamGraphRegister()))) goto exit;
 #if CUDART_VERSION >= 11030
   if (info->algorithm == NCCL_ALGO_NVLS || info->algorithm == NCCL_ALGO_NVLS_TREE) {
-    if (!comm->nvlsRegSupport || info->opDev.op == ncclDevPreMulSum) goto exit;
-    bool regBufUsed = false;
-    const void *sendbuff = info->sendbuff;
-    void *recvbuff = info->recvbuff;
-    if (info->func == ncclFuncAllGather) sendbuff = NULL;
-    if (info->func == ncclFuncReduceScatter) recvbuff = NULL;
-    size_t elementSize = ncclTypeSize(info->datatype);
-    size_t sendbuffSize = elementSize*ncclFuncSendCount(info->func, comm->nRanks, info->count);
-    size_t recvbuffSize = elementSize*ncclFuncRecvCount(info->func, comm->nRanks, info->count);
+    // if (!comm->nvlsRegSupport || info->opDev.op == ncclDevPreMulSum) goto exit;
+    // bool regBufUsed = false;
+    // const void *sendbuff = info->sendbuff;
+    // void *recvbuff = info->recvbuff;
+    // if (info->func == ncclFuncAllGather) sendbuff = NULL;
+    // if (info->func == ncclFuncReduceScatter) recvbuff = NULL;
+    // size_t elementSize = ncclTypeSize(info->datatype);
+    // size_t sendbuffSize = elementSize*ncclFuncSendCount(info->func, comm->nRanks, info->count);
+    // size_t recvbuffSize = elementSize*ncclFuncRecvCount(info->func, comm->nRanks, info->count);
 
-    /* first try local registration. */
-    if (ncclParamLocalRegister()) {
-      ncclNvlsLocalRegisterBuffer(comm, sendbuff, recvbuff, sendbuffSize, recvbuffSize, &regBufUsed, outRegBufSend, outRegBufRecv);
-    }
+    // /* first try local registration. */
+    // if (ncclParamLocalRegister()) {
+    //   ncclNvlsLocalRegisterBuffer(comm, sendbuff, recvbuff, sendbuffSize, recvbuffSize, &regBufUsed, outRegBufSend, outRegBufRecv);
+    // }
 
-    if (regBufUsed == false && comm->planner.persistent && ncclParamGraphRegister()) {
-      ncclNvlsGraphRegisterBuffer(comm, sendbuff, recvbuff, sendbuffSize, recvbuffSize, &regBufUsed, outRegBufSend, outRegBufRecv, cleanupQueue, &info->nCleanupQueueElts);
-    }
+    // if (regBufUsed == false && comm->planner.persistent && ncclParamGraphRegister()) {
+    //   ncclNvlsGraphRegisterBuffer(comm, sendbuff, recvbuff, sendbuffSize, recvbuffSize, &regBufUsed, outRegBufSend, outRegBufRecv, cleanupQueue, &info->nCleanupQueueElts);
+    // }
 
-    if (regBufUsed) {
-      *regNeedConnect = false;
-      /* tweak NVLS channels usage; for registered NVLS buffer, we only need 4/5 channels to
-       * saturate bandwidth. */
-      if (comm->nNodes == 1) {
-        if (info->func == ncclFuncReduceScatter)
-          info->nMaxChannels = std::max(comm->config.minCTAs, std::min(comm->config.maxCTAs, 5));
-        else
-          info->nMaxChannels = std::max(comm->config.minCTAs, std::min(comm->config.maxCTAs, 4));
-      } else {
-        info->nMaxChannels = std::max(comm->config.minCTAs, std::min(comm->config.maxCTAs, 6));
-      }
-      info->regBufType = NCCL_NVLS_REG_BUFFER;
-    }
+    // if (regBufUsed) {
+    //   *regNeedConnect = false;
+    //   /* tweak NVLS channels usage; for registered NVLS buffer, we only need 4/5 channels to
+    //    * saturate bandwidth. */
+    //   if (comm->nNodes == 1) {
+    //     if (info->func == ncclFuncReduceScatter)
+    //       info->nMaxChannels = std::max(comm->config.minCTAs, std::min(comm->config.maxCTAs, 5));
+    //     else
+    //       info->nMaxChannels = std::max(comm->config.minCTAs, std::min(comm->config.maxCTAs, 4));
+    //   } else {
+    //     info->nMaxChannels = std::max(comm->config.minCTAs, std::min(comm->config.maxCTAs, 6));
+    //   }
+    //   info->regBufType = NCCL_NVLS_REG_BUFFER;
+    // }
   } else if ((info->algorithm == NCCL_ALGO_COLLNET_DIRECT || info->algorithm == NCCL_ALGO_COLLNET_CHAIN) && comm->collNetRegSupport && info->opDev.op != ncclDevPreMulSum && info->opDev.op != ncclDevSumPostDiv) {
     size_t elementSize = ncclTypeSize(info->datatype);
     size_t sendbuffSize = elementSize*ncclFuncSendCount(info->func, comm->nRanks, info->count);

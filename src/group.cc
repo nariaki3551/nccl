@@ -152,16 +152,16 @@ ncclResult_t ncclCollPreconnectFunc(struct ncclAsyncJob* job_) {
           NCCLCHECKGOTO(ncclTransportTreeConnect(comm), ret, fail);
           break;
         }
-        case NCCL_ALGO_NVLS: {
-          /* If we are using NVLS_TREE algo, we must mark NVLS algo to set up
-           * NVLS intra-node buffer */
-          NCCLCHECKGOTO(ncclNvlsBufferSetup(comm), ret, fail);
-          break;
-        }
-        case NCCL_ALGO_NVLS_TREE: {
-          NCCLCHECKGOTO(ncclNvlsTreeConnect(comm), ret, fail);
-          break;
-        }
+        // case NCCL_ALGO_NVLS: {
+        //   /* If we are using NVLS_TREE algo, we must mark NVLS algo to set up
+        //    * NVLS intra-node buffer */
+        //   NCCLCHECKGOTO(ncclNvlsBufferSetup(comm), ret, fail);
+        //   break;
+        // }
+        // case NCCL_ALGO_NVLS_TREE: {
+        //   NCCLCHECKGOTO(ncclNvlsTreeConnect(comm), ret, fail);
+        //   break;
+        // }
         case NCCL_ALGO_COLLNET_CHAIN: {
           NCCLCHECKGOTO(ncclCollNetChainBufferSetup(comm), ret, fail);
           break;
