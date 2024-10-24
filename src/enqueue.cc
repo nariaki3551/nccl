@@ -1850,6 +1850,7 @@ static ncclResult_t topoGetAlgoInfo(
       info->algorithm = NCCL_ALGO_COLLNET_DIRECT;
     }
   }
+  info->protocol = NCCL_PROTO_SIMPLE;
   // if (protoEnv) {
   //   int proto = atoi(protoEnv);
   //   if (proto >= 0 && proto < NCCL_NUM_PROTOCOLS) {
