@@ -517,26 +517,6 @@ extern bool const ncclDevKernelForFuncIsSpecialized[/*funcIndex*/];
 // Launch a one-rank reduction on stream.
 ncclResult_t ncclLaunchOneRank(void* dst, void const* src, size_t nElts, struct ncclDevRedOpFull redOp, ncclDataType_t type, cudaStream_t stream);
 
-// `ncclNvlsSupported()` needs to be in sync with "func_valid" in "src/device/generate.py"
-inline bool ncclNvlsSupported(int devRedOp, int type) {
-  switch (type) {
-  case ncclInt32:
-  case ncclUint32:
-  case ncclInt64:
-  case ncclUint64:
-  case ncclFloat16:
-  #if defined(__CUDA_BF16_TYPES_EXIST__)
-  case ncclBfloat16:
-  #endif
-    return devRedOp == ncclDevSum || devRedOp == ncclDevMinMax;
-  case ncclFloat:
-  case ncclDouble:
-    return devRedOp == ncclDevSum;
-  default:
-    return false;
-  }
-}
-
 // `ncclDevFuncIndex()` needs to be in sync with "all_functions()" in "src/device/generate.py"
 inline int ncclDevFuncId(int coll, int devRedOp, int type, int algo, int proto) {
   #if defined(__CUDA_BF16_TYPES_EXIST__)

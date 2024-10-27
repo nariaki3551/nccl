@@ -543,7 +543,7 @@ struct ncclComm {
   struct ncclCollNetSharedRes* collNetSharedRes;
 
   // NVLink SHARP (NVLS) support
-  int nvlsSupport;
+  // int nvlsSupport;
   int nvlsRegSupport;
   /* sharable NVLS resource. */
   struct ncclNvlsSharedRes* nvlsResources;

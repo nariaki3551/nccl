@@ -932,10 +932,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   nvlsGraph->pattern = NCCL_TOPO_PATTERN_NVLS;
   nvlsGraph->minChannels = 1;
   nvlsGraph->maxChannels = MAXCHANNELS;
-  if (comm->nvlsSupport) {
-    NCCLCHECKGOTO(ncclTopoCompute(comm->topo, nvlsGraph), ret, fail);
-    NCCLCHECKGOTO(ncclTopoPrintGraph(comm->topo, nvlsGraph), ret, fail);
-  }
   timers[TIMER_INIT_GRAPHS] = clockNano() - timers[TIMER_INIT_GRAPHS];
 
   // Initialize num P2P LL buffers for this communicator

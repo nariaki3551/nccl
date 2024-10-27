@@ -20,20 +20,6 @@ static ncclTuner_v3_t* tunerSymbol = nullptr;
 static ncclTuner_v2_t* ncclTuner_v2 = nullptr;
 static ncclTuner_v3_t ncclTuner_v2_as_v3;
 
-static int hasNvlsSupport(float** collCostTable) {
-  // Requirements for support of different algorithms:
-  //
-  // - NVLS intra-node: nvlsSupport
-  // - NVLS intra+inter-node: collNetSupport
-  // - NVLSTree intra-node: always disabled
-  // - NVLSTree inter-node: nvlsSupport
-  // - Collnet* inter-node: collNetSupport
-  //
-  // nvlsSupport = 1 if either NVLS or NVLS_TREE entries in the cost table are not -1
-  float (*table)[NCCL_NUM_PROTOCOLS] = (float (*)[NCCL_NUM_PROTOCOLS])collCostTable;
-  return (table[NCCL_ALGO_NVLS][NCCL_PROTO_SIMPLE] != NCCL_ALGO_PROTO_IGNORE || table[NCCL_ALGO_NVLS_TREE][NCCL_PROTO_SIMPLE] != NCCL_ALGO_PROTO_IGNORE) ? 1 : 0;
-}
-
 static int hasCollNetSupport(float** collCostTable) {
   float (*table)[NCCL_NUM_PROTOCOLS] = (float (*)[NCCL_NUM_PROTOCOLS])collCostTable;
   return (table[NCCL_ALGO_COLLNET_CHAIN][NCCL_PROTO_SIMPLE] == NCCL_ALGO_PROTO_IGNORE) ? 0 : 1;
@@ -42,7 +28,7 @@ static int hasCollNetSupport(float** collCostTable) {
 static ncclResult_t ncclTuner_v2_as_v3_getCollInfo(void* context, ncclFunc_t collType, size_t nBytes, int numPipeOps, float** collCostTable, int numAlgo __attribute__((unused)), int numProto __attribute__((unused)), int* nChannels) {
   int algorithm = NCCL_ALGO_UNDEF;
   int protocol = NCCL_PROTO_UNDEF;
-  int nvlsSupport = hasNvlsSupport(collCostTable);
+  int nvlsSupport = false; // hasNvlsSupport(collCostTable);
   int collNetSupport = hasCollNetSupport(collCostTable);
   NCCLCHECK(ncclTuner_v2->getCollInfo(context, collType, nBytes, collNetSupport, nvlsSupport, numPipeOps, &algorithm, &protocol, nChannels));
   // set time to 0 below to make sure this algorithm/protocol is selected later on
