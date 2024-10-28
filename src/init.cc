@@ -924,9 +924,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   nvlsGraph->maxChannels = MAXCHANNELS;
   timers[TIMER_INIT_GRAPHS] = clockNano() - timers[TIMER_INIT_GRAPHS];
 
-  // Initialize num P2P LL buffers for this communicator
-  comm->allocP2pNetLLBuffers = ncclParamAllocP2pNetLLBuffers() == 1;
-
   if (comm->rank == ncclParamGraphDumpFileRank()) {
     struct ncclTopoGraph* dumpGraphs[5] = { ringGraph, treeGraph, collNetDirectGraph, collNetChainGraph, nvlsGraph };
     NCCLCHECKGOTO(ncclTopoDumpGraphs(comm->topo, 5, dumpGraphs), ret, fail);
