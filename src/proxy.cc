@@ -1603,7 +1603,8 @@ void* ncclProxyService(void* _args) {
       if (pollfds[s].fd == -1) continue;
 
       // Progress all ops for this ncclProxyLocalPeer
-      if (stop == PROXY_ABORT && ncclCuMemEnable() && ncclCuMemHostEnable() && !proxyState->directMode) closeConn = 1;
+      // if (stop == PROXY_ABORT && ncclCuMemEnable() && ncclCuMemHostEnable() && !proxyState->directMode) closeConn = 1;
+      if (stop == PROXY_ABORT && ncclCuMemEnable() && ncclCuMemHostEnable()) closeConn = 1;
       ncclProxyAsyncOp* op = peer->asyncOps;
       while (op != nullptr) {
         ncclProxyAsyncOp* opnext = op->next; /* in case op is freed in proxyProgressAsync */
@@ -1781,7 +1782,7 @@ ncclResult_t ncclProxyCreate(struct ncclComm* comm) {
     proxyState->ncclNet = comm->ncclNet;
     proxyState->ncclCollNet = comm->ncclCollNet;
     proxyState->profilerContext = comm->profilerContext;
-    proxyState->directMode = comm->directMode;
+    // proxyState->directMode = comm->directMode;
     memcpy(proxyState->buffSizes, comm->buffSizes, sizeof(comm->buffSizes));
 
     PTHREADCHECK(pthread_create(&comm->proxyState->thread, NULL, ncclProxyService, comm->proxyState), "pthread_create");

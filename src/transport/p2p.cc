@@ -850,13 +850,13 @@ ncclResult_t ncclIpcLocalRegisterBuffer(ncclComm* comm, const void* userbuff, si
           // get the CUDA legacy mem handle, or through cuMem*.
           if (ipcInfo.legacyIpcCap) {
             // legacy export
-            if (comm->directMode) goto fail;
+            // if (comm->directMode) goto fail;
             CUDACHECKGOTO(cudaIpcGetMemHandle(&ipcInfo.ipcDesc.devIpc, baseAddr), ret, fail);
           } else if (ncclCuMemEnable()) {
             CUmemGenericAllocationHandle handle;
             if (CUPFN(cuMemRetainAllocationHandle(&handle, baseAddr)) != CUDA_SUCCESS) {
               // if cuMem* export fails, retry legacy export
-              if (comm->directMode) goto fail;
+              // if (comm->directMode) goto fail;
               CUDACHECKGOTO(cudaIpcGetMemHandle(&ipcInfo.ipcDesc.devIpc, baseAddr), ret, fail);
               ipcInfo.legacyIpcCap = true;
             } else {
@@ -1005,13 +1005,13 @@ ncclResult_t ncclIpcGraphRegisterBuffer(ncclComm* comm, const void* userbuff, si
     // Same as local registration. Get the mem handle for that buffer. It may have been allocated through
     // cudaMalloc in which case we'll get the CUDA legacy mem handle, or through cuMem*.
     if (ipcInfo.legacyIpcCap) {
-      if (comm->directMode) goto fail;
+      // if (comm->directMode) goto fail;
       CUDACHECKGOTO(cudaIpcGetMemHandle(&ipcInfo.ipcDesc.devIpc, baseAddr), ret, fail);
     } else if (ncclCuMemEnable()) {
       // cuMem* export
       CUmemGenericAllocationHandle handle;
       if (pfn_cuMemRetainAllocationHandle(&handle, baseAddr) != CUDA_SUCCESS) {
-        if (comm->directMode) goto fail;
+        // if (comm->directMode) goto fail;
         CUDACHECKGOTO(cudaIpcGetMemHandle(&ipcInfo.ipcDesc.devIpc, baseAddr), ret, fail);
         ipcInfo.legacyIpcCap = true;
       } else {

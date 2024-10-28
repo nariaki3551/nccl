@@ -288,7 +288,7 @@ struct ncclProxyState {
   ncclNet_t* ncclNet;
   ncclCollNet_t* ncclCollNet;
   uint32_t* abortFlag;
-  bool directMode;
+  // bool directMode;
   // Service threads
   pthread_t thread;
   pthread_t threadUDS;
