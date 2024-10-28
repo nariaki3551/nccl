@@ -468,7 +468,7 @@ struct ncclComm {
   // int p2pnChannelsPerPeer;
 
   // Should this comm allocate LL buffers for network P2P connections?
-  bool allocP2pNetLLBuffers;
+  // bool allocP2pNetLLBuffers; // NOTE: for LL PROTOCOL
 
   // Buffer sizes
   int buffSizes[NCCL_NUM_PROTOCOLS];
