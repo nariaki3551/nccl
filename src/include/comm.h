@@ -605,7 +605,6 @@ extern enum ncclLaunchMode ncclParamLaunchMode;
 void ncclCommPushFree(struct ncclComm* comm, void* buf);
 void ncclCommPushCudaFree(struct ncclComm* comm, void* buf);
 void ncclCommPushCudaHostFree(struct ncclComm* comm, void* buf);
-void ncclCommPushCudaGdrFree(struct ncclComm* comm, void* handle);
 
 inline ncclResult_t ncclCommPollCallbacks(struct ncclComm* comm, bool waitSome) {
   ncclResult_t result = ncclSuccess;

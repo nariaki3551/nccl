@@ -164,18 +164,6 @@ void ncclCommPushCudaHostFree(struct ncclComm* comm, void* obj) {
   comm->destructorHead = dtor;
 }
 
-static ncclResult_t ncclDestructorFnCudaGdrFree(struct ncclDestructor* dtor) {
-  NCCLCHECK(ncclGdrCudaFree(dtor->obj));
-  return ncclSuccess;
-}
-void ncclCommPushCudaGdrFree(struct ncclComm* comm, void* handle) {
-  struct ncclDestructor* dtor = ncclMemoryStackAlloc<struct ncclDestructor>(&comm->memPermanent);
-  dtor->fn = ncclDestructorFnCudaGdrFree;
-  dtor->obj = handle;
-  dtor->next = comm->destructorHead;
-  comm->destructorHead = dtor;
-}
-
 static ncclResult_t commFree(ncclComm_t comm) {
   int abort = 0;
   /* commFree() should not involve any sync among ranks. */
@@ -476,11 +464,12 @@ static ncclResult_t devCommSetup(ncclComm_t comm) {
     INFO(NCCL_INIT, "CC %s, Multi-GPU CC %s, workFifoBytes %d", ccStatus.CCEnabled ? "On" : "Off", ccStatus.multiGpuCCEnabled ? "On" : "Off", comm->workFifoBytes);
   }
 
-  if (ncclGdrCopy != NULL && ncclParamGdrCopyFifoEnable() == 1) {
-    // The workFifoBuf lives in GDR mapped CUDA memory.
-    NCCLCHECKGOTO(ncclGdrCudaCalloc(&comm->workFifoBuf, &comm->workFifoBufDev, comm->workFifoBytes, &comm->workFifoBufGdrHandle), ret, fail);
-    ncclCommPushCudaGdrFree(comm, comm->workFifoBufGdrHandle);
-  } else {
+  // if (ncclGdrCopy != NULL && ncclParamGdrCopyFifoEnable() == 1) {
+  //   // The workFifoBuf lives in GDR mapped CUDA memory.
+  //   NCCLCHECKGOTO(ncclGdrCudaCalloc(&comm->workFifoBuf, &comm->workFifoBufDev, comm->workFifoBytes, &comm->workFifoBufGdrHandle), ret, fail);
+  //   ncclCommPushCudaGdrFree(comm, comm->workFifoBufGdrHandle);
+  // } else
+  {
     // The workFifoBuf lives in cudaHost memory.
     comm->workFifoBufGdrHandle = nullptr;
     NCCLCHECKGOTO(ncclCudaHostCalloc(&comm->workFifoBuf, comm->workFifoBytes), ret, fail);
@@ -644,70 +633,70 @@ NCCL_PARAM(AllocP2pNetLLBuffers, "ALLOC_P2P_NET_LL_BUFFERS", 0);
 // MNNVL: Flag to indicate whether to enable Multi-Node NVLink
 NCCL_PARAM(MNNVLEnable, "MNNVL_ENABLE", 2);
 
-#if CUDART_VERSION >= 11030
+// #if CUDART_VERSION >= 11030
 
-#include <cuda.h>
-#include "cudawrap.h"
+// #include <cuda.h>
+// #include "cudawrap.h"
 
-// Determine if MNNVL support is available
+// // Determine if MNNVL support is available
+// static int checkMNNVL(struct ncclComm* comm) {
+//   ncclResult_t ret = ncclSuccess;
+
+//   // MNNVL requires cuMem to be enabled
+//   if (!ncclCuMemEnable()) return 0;
+
+//   // MNNVL also requires FABRIC handle support
+//   int cudaDev;
+//   int flag = 0;
+//   CUdevice currentDev;
+//   CUDACHECK(cudaGetDevice(&cudaDev));
+//   CUCHECK(cuDeviceGet(&currentDev, cudaDev));
+//   // Ignore error if CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED is not supported
+//   (void) CUPFN(cuDeviceGetAttribute(&flag, CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED, currentDev));;
+//   if (!flag) return 0;
+//   // Check that all ranks have initialized the fabric fully
+//   for (int i = 0; i < comm->nRanks; i++) {
+//     if (comm->peerInfo[i].fabricInfo.state != NVML_GPU_FABRIC_STATE_COMPLETED) return 0;
+//   }
+
+//   // Determine our MNNVL domain/clique
+//   NCCLCHECKGOTO(ncclCalloc(&comm->clique.ranks, comm->nRanks), ret, fail);
+//   comm->clique.id = comm->peerInfo[comm->rank].fabricInfo.cliqueId;
+//   for (int i = 0; i < comm->nRanks; i++) {
+//     nvmlGpuFabricInfoV_t *fabricInfo1 = &comm->peerInfo[comm->rank].fabricInfo;
+//     nvmlGpuFabricInfoV_t *fabricInfo2 = &comm->peerInfo[i].fabricInfo;
+//     // Check if the cluster UUID and cliqueId match
+//     // A zero UUID means we don't have MNNVL fabric info - disable MNNVL
+//     if ((((long *)&fabricInfo2->clusterUuid)[0]|((long *)fabricInfo2->clusterUuid)[1]) == 0) goto fail;
+//     if ((memcmp(fabricInfo1->clusterUuid, fabricInfo2->clusterUuid, NVML_GPU_FABRIC_UUID_LEN) == 0) &&
+//         (fabricInfo1->cliqueId == fabricInfo2->cliqueId)) {
+//       if (i == comm->rank) {
+//         comm->cliqueRank = comm->clique.size;
+//       }
+//       comm->clique.ranks[comm->clique.size++] = i;
+//     }
+//   }
+//   // Determine whether to enable MNNVL or not
+//   comm->MNNVL = ncclParamMNNVLEnable() == 2 ? comm->clique.size > 1 : ncclParamMNNVLEnable();
+//   INFO(NCCL_INIT, "MNNVL %d cliqueId %x cliqueSize %d cliqueRank %d ", comm->MNNVL, comm->clique.id, comm->clique.size, comm->cliqueRank);
+
+//   if (comm->MNNVL) {
+//     // Force the CUMEM handle type to be FABRIC for MNNVL
+//     ncclCuMemHandleType = CU_MEM_HANDLE_TYPE_FABRIC;
+//   }
+
+//   return comm->MNNVL;
+
+// fail:
+//   if (comm->clique.ranks) free(comm->clique.ranks);
+//   return 0;
+// }
+
+// #else
 static int checkMNNVL(struct ncclComm* comm) {
-  ncclResult_t ret = ncclSuccess;
-
-  // MNNVL requires cuMem to be enabled
-  if (!ncclCuMemEnable()) return 0;
-
-  // MNNVL also requires FABRIC handle support
-  int cudaDev;
-  int flag = 0;
-  CUdevice currentDev;
-  CUDACHECK(cudaGetDevice(&cudaDev));
-  CUCHECK(cuDeviceGet(&currentDev, cudaDev));
-  // Ignore error if CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED is not supported
-  (void) CUPFN(cuDeviceGetAttribute(&flag, CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED, currentDev));;
-  if (!flag) return 0;
-  // Check that all ranks have initialized the fabric fully
-  for (int i = 0; i < comm->nRanks; i++) {
-    if (comm->peerInfo[i].fabricInfo.state != NVML_GPU_FABRIC_STATE_COMPLETED) return 0;
-  }
-
-  // Determine our MNNVL domain/clique
-  NCCLCHECKGOTO(ncclCalloc(&comm->clique.ranks, comm->nRanks), ret, fail);
-  comm->clique.id = comm->peerInfo[comm->rank].fabricInfo.cliqueId;
-  for (int i = 0; i < comm->nRanks; i++) {
-    nvmlGpuFabricInfoV_t *fabricInfo1 = &comm->peerInfo[comm->rank].fabricInfo;
-    nvmlGpuFabricInfoV_t *fabricInfo2 = &comm->peerInfo[i].fabricInfo;
-    // Check if the cluster UUID and cliqueId match
-    // A zero UUID means we don't have MNNVL fabric info - disable MNNVL
-    if ((((long *)&fabricInfo2->clusterUuid)[0]|((long *)fabricInfo2->clusterUuid)[1]) == 0) goto fail;
-    if ((memcmp(fabricInfo1->clusterUuid, fabricInfo2->clusterUuid, NVML_GPU_FABRIC_UUID_LEN) == 0) &&
-        (fabricInfo1->cliqueId == fabricInfo2->cliqueId)) {
-      if (i == comm->rank) {
-        comm->cliqueRank = comm->clique.size;
-      }
-      comm->clique.ranks[comm->clique.size++] = i;
-    }
-  }
-  // Determine whether to enable MNNVL or not
-  comm->MNNVL = ncclParamMNNVLEnable() == 2 ? comm->clique.size > 1 : ncclParamMNNVLEnable();
-  INFO(NCCL_INIT, "MNNVL %d cliqueId %x cliqueSize %d cliqueRank %d ", comm->MNNVL, comm->clique.id, comm->clique.size, comm->cliqueRank);
-
-  if (comm->MNNVL) {
-    // Force the CUMEM handle type to be FABRIC for MNNVL
-    ncclCuMemHandleType = CU_MEM_HANDLE_TYPE_FABRIC;
-  }
-
-  return comm->MNNVL;
-
-fail:
-  if (comm->clique.ranks) free(comm->clique.ranks);
   return 0;
 }
-
-#else
-static int checkMNNVL(struct ncclComm* comm) {
-  return 0;
-}
-#endif
+// #endif
 
 #define TIMER_INIT_TOTAL 0
 #define TIMER_INIT_KERNELS 1
@@ -1307,52 +1296,6 @@ struct ncclCommFinalizeAsyncJob {
 
 NCCL_PARAM(CommSplitShareResources, "COMM_SPLIT_SHARE_RESOURCES", NCCL_CONFIG_UNDEF_INT);
 
-typedef struct{
-  int key;
-  int color;
-} commSplitInfo;
-static ncclResult_t commGetSplitInfo(struct ncclComm* comm, struct ncclComm* parent, int color, int key, int* nRanksRet, int* myRankRet, int* parentRanksRet) {
-  int nRanks = 0, myRank = 0;
-  ncclResult_t ret = ncclSuccess;
-
-  commSplitInfo* info = NULL;
-  NCCLCHECKGOTO(ncclCalloc(&info, parent->nRanks), ret, fail);
-
-  // Compute nRanks, my rank and the ranks (of the original comm) before and after me
-  info[parent->rank].color = color;
-  info[parent->rank].key = key;
-  NCCLCHECKGOTO(bootstrapAllGather(parent->bootstrap, info, sizeof(commSplitInfo)), ret, fail);
-
-  // Negative color does not create a new comm. Return now.
-  if (color == NCCL_SPLIT_NOCOLOR) goto exit;
-
-  memset(parentRanksRet, 0xff, sizeof(int) * parent->nRanks);
-  for (int i = 0; i < parent->nRanks; i++) {
-    if (info[i].color != color) continue;
-    // Find where to insert this rank
-    int insert = 0;
-    while (insert < nRanks && info[parentRanksRet[insert]].key <= info[i].key) insert++;
-    // Shift ranks by one after insert
-    for (int r = nRanks; r > insert; r--) parentRanksRet[r] = parentRanksRet[r - 1];
-    // Insert our rank
-    parentRanksRet[insert] = i;
-    nRanks++;
-  }
-
-  for (int i = 0; i < nRanks; i++) {
-    if (parentRanksRet[i] == parent->rank) myRank = i;
-  }
-
-  *nRanksRet = nRanks;
-  *myRankRet = myRank;
-
-exit:
-  free(info);
-  return ret;
-fail:
-  goto exit;
-}
-
 static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
   struct ncclCommInitRankAsyncJob* job = (struct ncclCommInitRankAsyncJob*)job_;
   ncclComm_t comm = job->comm;
@@ -1382,24 +1325,7 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
   }
   timers[TIMER_INIT_KERNELS] = clockNano() - timers[TIMER_INIT_KERNELS];
 
-  if (job->parent) {
-    NCCLCHECKGOTO(ncclCalloc(&parentRanks, job->parent->nRanks), res, fail);
-    NCCLCHECKGOTO(commGetSplitInfo(comm, job->parent, job->color, job->key, &job->nranks, &job->myrank, parentRanks), res, fail);
-    // Negative color does not create a new comm object. We needed to take part in the allgather, but we're done now.
-    if (job->color == NCCL_SPLIT_NOCOLOR) goto exit;
-    timers[TIMER_INIT_ALLOC] = clockNano();
-    NCCLCHECKGOTO(commAlloc(comm, job->parent, job->nranks, job->myrank), res, fail);
-    timers[TIMER_INIT_ALLOC] = clockNano() - timers[TIMER_INIT_ALLOC];
-    // obtain a unique hash for the comm, re-using part of the parent's hash, commHash is a 64bit struct (=16 hex), add the color
-    ncclUniqueId tmpId;
-    memset(&tmpId,0,sizeof(ncclUniqueId));// must set 0 here to avoid undefined bits
-    snprintf((char*)&tmpId, NCCL_UNIQUE_ID_BYTES, "%016lx-%d", job->parent->commHash, job->color);
-    comm->commHash = getHash(tmpId.internal, NCCL_UNIQUE_ID_BYTES);
-    INFO(NCCL_INIT, "%s comm %p rank %d nranks %d cudaDev %d nvmlDev %d busId %lx parent %p color %d key %d- Init START", job->funcName,
-         comm, comm->rank, comm->nRanks, comm->cudaDev, comm->nvmlDev, comm->busId, job->parent, job->color, job->key);
-    // debug info, no commId was used
-    commIdHash = 0;
-  } else {
+  {
     timers[TIMER_INIT_ALLOC] = clockNano();
     NCCLCHECKGOTO(commAlloc(comm, NULL, job->nranks, job->myrank), res, fail);
     timers[TIMER_INIT_ALLOC] = clockNano() - timers[TIMER_INIT_ALLOC];
@@ -1742,72 +1668,6 @@ ncclResult_t ncclCommInitRank(ncclComm_t* newcomm, int nranks, ncclUniqueId comm
   return ncclSuccess;
 }
 
-NCCL_API(ncclResult_t, ncclCommInitAll, ncclComm_t* comms, int ndev, const int* devlist);
-ncclResult_t ncclCommInitAll(ncclComm_t* comms, int ndev, const int* devlist) {
-  ncclResult_t ret = ncclSuccess;
-  int totalnDev;
-  int *gpuFlags = NULL;
-  ncclConfig_t config = NCCL_CONFIG_INITIALIZER;
-  int oldDev = 0;
-
-  constexpr nvtxPayloadSchemaEntry_t CommInitAllSchema[] = {
-    {0, NVTX_PAYLOAD_ENTRY_TYPE_INT, "No. of devices"}
-  };
-  NVTX3_FUNC_WITH_PARAMS(CommInitAll, CommInitAllSchema, ndev)
-
-  // Load the CUDA driver and dlsym hooks (can fail on old drivers)
-  (void)ncclCudaLibraryInit();
-
-  CUDACHECK(cudaGetDevice(&oldDev));
-  NCCLCHECKGOTO(PtrCheck(comms, "CommInitAll", "comms"), ret, fail);
-  if (ndev < 0) {
-    WARN("Invalid device count requested : %d", ndev);
-    ret = ncclInvalidArgument;
-    goto fail;
-  }
-
-  CUDACHECKGOTO(cudaGetDeviceCount(&totalnDev), ret, fail);
-  if (devlist) {
-    NCCLCHECKGOTO(ncclCalloc(&gpuFlags, totalnDev), ret, fail);
-    for (int i = 0; i < ndev; ++i) {
-      /* invalid device check. */
-      if (devlist[i] < 0 || devlist[i] >= totalnDev) {
-        WARN("Invalid device %d (totalnDev=%d)", devlist[i], totalnDev);
-        ret = ncclInvalidArgument;
-        goto fail;
-      }
-
-      /* duplicate device check. */
-      if (gpuFlags[devlist[i]] != 0) {
-        ret = ncclInvalidUsage;
-        goto fail;
-      }
-
-      gpuFlags[devlist[i]] = 1;
-    }
-    free(gpuFlags);
-    gpuFlags = nullptr;
-  }
-
-  ncclUniqueId uniqueId;
-  NCCLCHECKGOTO(ncclGetUniqueId(&uniqueId), ret, fail);
-  NCCLCHECKGOTO(ncclGroupStart(), ret, fail);
-  for (int i=0; i<ndev; i++) {
-    // Ignore return codes .. we need to call ncclGroupEnd to clean up anyway
-    int dev = devlist ? devlist[i] : i;
-    CUDACHECKGOTO(cudaSetDevice(dev), ret, fail);
-    ncclCommInitRankDev(comms+i, ndev,1, &uniqueId, i, dev, &config, __func__);
-  }
-  NCCLCHECKGOTO(ncclGroupEnd(), ret, fail);
-
-exit:
-  cudaSetDevice(oldDev);
-  free(gpuFlags);
-  return ret;
-fail:
-  goto exit;
-}
-
 ncclResult_t ncclCommSetAsyncError(ncclComm_t comm, ncclResult_t nextState) {
   if (nextState < 0 || nextState >= ncclNumResults || comm == NULL) {
     WARN("ncclCommSetAsyncError: error comm %p sets state %d", comm, nextState);
@@ -1816,66 +1676,6 @@ ncclResult_t ncclCommSetAsyncError(ncclComm_t comm, ncclResult_t nextState) {
 
   __atomic_store_n(&comm->asyncResult, nextState, __ATOMIC_RELEASE);
   return ncclSuccess;
-}
-
-NCCL_API(ncclResult_t, ncclCommInitRankConfig, ncclComm_t* comm, int nranks, ncclUniqueId commId, int myrank, ncclConfig_t *config);
-ncclResult_t ncclCommInitRankConfig(ncclComm_t *newcomm, int nranks, ncclUniqueId commId, int myrank, ncclConfig_t *config) {
-  int cudaDev;
-  ncclResult_t ret = ncclSuccess;
-  ncclConfig_t internalConfig = NCCL_CONFIG_INITIALIZER;
-  ncclConfig_t *internalConfigPtr = NULL;
-  NCCLCHECK(ncclGroupStartInternal());
-
-  (void)ncclCudaLibraryInit();
-  CUDACHECK(cudaGetDevice(&cudaDev));
-
-  NvtxParamsCommInitRank payload{myrank, nranks, cudaDev};
-  NVTX3_FUNC_WITH_PARAMS(CommInitRankConfig, CommInitRankSchema, payload)
-
-  if (config == NULL)
-    internalConfigPtr = &internalConfig;
-  else
-    internalConfigPtr = config;
-  NCCLCHECKGOTO(ncclCommInitRankDev(newcomm, nranks, 1, &commId, myrank, cudaDev, internalConfigPtr, __func__), ret, fail);
-
-exit:
-  ncclGroupErrCheck(ret);
-  NCCLCHECK(ncclGroupEndInternal());
-  if (newcomm && *newcomm && !(*newcomm)->config.blocking) (void) ncclCommGetAsyncError(*newcomm, &ret);
-  return ret;
-fail:
-  if (newcomm && *newcomm && !(*newcomm)->config.blocking) (void) ncclCommSetAsyncError(*newcomm, ret);
-  goto exit;
-}
-
-NCCL_API(ncclResult_t, ncclCommInitRankScalable, ncclComm_t* newcomm, int nranks, int myrank, int nId, ncclUniqueId* commId, ncclConfig_t* config);
-ncclResult_t ncclCommInitRankScalable(ncclComm_t* newcomm, int nranks, int myrank, int nId, ncclUniqueId* commId, ncclConfig_t* config) {
-  int cudaDev;
-  ncclResult_t ret = ncclSuccess;
-  ncclConfig_t internalConfig = NCCL_CONFIG_INITIALIZER;
-  ncclConfig_t *internalConfigPtr = NULL;
-  NCCLCHECK(ncclGroupStartInternal());
-
-  (void)ncclCudaLibraryInit();
-  CUDACHECK(cudaGetDevice(&cudaDev));
-
-  NvtxParamsCommInitRank payload{myrank, nranks, cudaDev};
-  NVTX3_FUNC_WITH_PARAMS(CommInitRankScalable, CommInitRankSchema, payload)
-
-  if (config == NULL)
-    internalConfigPtr = &internalConfig;
-  else
-    internalConfigPtr = config;
-  NCCLCHECKGOTO(ncclCommInitRankDev(newcomm, nranks, nId, commId, myrank, cudaDev, internalConfigPtr, __func__), ret, fail);
-
-exit:
-  ncclGroupErrCheck(ret);
-  NCCLCHECK(ncclGroupEndInternal());
-  if (newcomm && *newcomm && !(*newcomm)->config.blocking) (void) ncclCommGetAsyncError(*newcomm, &ret);
-  return ret;
-fail:
-  if (newcomm && *newcomm && !(*newcomm)->config.blocking) (void) ncclCommSetAsyncError(*newcomm, ret);
-  goto exit;
 }
 
 static ncclResult_t commDestroySync(struct ncclAsyncJob* job_) {
@@ -2126,84 +1926,6 @@ constexpr nvtxPayloadSchemaEntry_t CommSplitSchema[] = {
     {0, NVTX_PAYLOAD_ENTRY_TYPE_INT, "color", nullptr, 0, offsetof(NvtxParamsCommSplit, color)},
     {0, NVTX_PAYLOAD_ENTRY_TYPE_INT, "key", nullptr, 0, offsetof(NvtxParamsCommSplit, key)},
 };
-
-NCCL_API(ncclResult_t, ncclCommSplit, ncclComm_t comm, int color, int key, ncclComm_t *newcomm, ncclConfig_t *config);
-ncclResult_t ncclCommSplit(ncclComm_t comm, int color, int key, ncclComm_t *newcomm, ncclConfig_t *config) {
-  struct ncclCommInitRankAsyncJob *job = NULL;
-  struct ncclComm* childComm = NCCL_COMM_NULL;
-  ncclResult_t res = ncclSuccess;
-
-  NvtxParamsCommSplit payload{comm->rank, comm->nRanks, comm->cudaDev, color, key};
-  NVTX3_FUNC_WITH_PARAMS(CommSplit, CommSplitSchema, payload)
-
-  int oldDev;
-  CUDACHECK(cudaGetDevice(&oldDev));
-
-  NCCLCHECK(ncclGroupStartInternal());
-  NCCLCHECKGOTO(CommCheck(comm, "CommSplit", "comm"), res, fail);
-  NCCLCHECKGOTO(PtrCheck(newcomm, "CommSplit", "newcomm"), res, fail);
-  NCCLCHECKGOTO(ncclCommEnsureReady(comm), res, fail);
-
-  CUDACHECKGOTO(cudaSetDevice(comm->cudaDev), res, fail);
-  /* *newcomm should be NCCL_COMM_NULL until comm split fully complete. */
-  *newcomm = NCCL_COMM_NULL;
-  if (color == NCCL_SPLIT_NOCOLOR) {
-    INFO(NCCL_INIT, "Rank %d has color with NCCL_SPLIT_NOCOLOR, not creating a new communicator", comm->rank);
-  } else {
-    NCCLCHECKGOTO(ncclCalloc(&childComm, 1), res, fail);
-    childComm->startMagic = childComm->endMagic = NCCL_MAGIC;
-    if (comm->config.splitShare) {
-      childComm->abortFlag = comm->abortFlag;
-      childComm->abortFlagDev = comm->abortFlagDev;
-      childComm->abortFlagRefCount = comm->abortFlagRefCount;
-      comm->childAbortFlag = NULL;
-      ncclAtomicRefCountIncrement(comm->abortFlagRefCount);
-    } else {
-      NCCLCHECKGOTO(ncclCalloc(&childComm->abortFlag, 1), res, fail);
-      NCCLCHECKGOTO(ncclCudaHostCalloc(&childComm->abortFlagDev, 1), res, fail);
-      NCCLCHECKGOTO(ncclCalloc(&childComm->abortFlagRefCount, 1), res, fail);
-      /* temporarily used to abort everything during child comm init. */
-      comm->childAbortFlag = childComm->abortFlag;
-      comm->childAbortFlagDev = childComm->abortFlagDev;
-      *childComm->abortFlagRefCount = 1;
-    }
-    if (config == NULL) {
-      NCCLCHECKGOTO(copyCommConfig(childComm, comm), res, fail);
-    } else {
-      NCCLCHECKGOTO(parseCommConfig(childComm, config), res, fail);
-    }
-
-    /* start with ncclInternalError and will be changed to ncclSuccess if init succeeds. */
-    childComm->initState = ncclInternalError;
-  }
-
-  NCCLCHECKGOTO(ncclCalloc(&job, 1), res, fail);
-  job->comm = childComm;
-  job->newcomm = newcomm;
-  job->parent = comm;
-  job->color = color;
-  job->key = key;
-  job->cudaDev = comm->cudaDev;
-  snprintf(job->funcName, NCCL_COMMINIT_FUNCNAME_LEN, "%s", __func__);
-  NCCLCHECKGOTO(ncclAsyncLaunch((struct ncclAsyncJob*)job, ncclCommInitRankFunc, NULL, free, comm), res, fail);
-
-exit:
-  cudaSetDevice(oldDev);
-  (void)ncclGroupErrCheck(res);
-  NCCLCHECK(ncclGroupEndInternal());
-  return res;
-fail:
-  if (childComm) {
-    if (comm && !comm->config.splitShare) {
-      free(childComm->abortFlag);
-      if (childComm->abortFlagDev) ncclCudaHostFree(childComm->abortFlagDev);
-      free(childComm->abortFlagRefCount);
-    }
-    free(childComm);
-  }
-  if (newcomm) *newcomm = NULL;
-  goto exit;
-}
 
 NCCL_API(const char*, ncclGetErrorString, ncclResult_t code);
 const char* ncclGetErrorString(ncclResult_t code) {
