@@ -470,51 +470,6 @@ static ncclResult_t createListenSocket(struct ncclComm* comm, uint64_t magic, st
   NCCLCHECK(ncclSocketGetAddr(socket, addr));
   return ncclSuccess;
 }
-#define MAX_OOB_DEVS 16
-static ncclResult_t netGetDevice(int rank, struct ncclComm* comm, int* dev) {
-  static int devOOB = -1;
-  if (devOOB < 0) {
-    pthread_mutex_lock(&bootstrapNetLock);
-    if (devOOB < 0) {
-      char* userIfEnv = getenv("NCCL_OOB_NET_IFNAME");
-      if (userIfEnv && strlen(userIfEnv) > 0) {
-        INFO(NCCL_BOOTSTRAP | NCCL_ENV, "NCCL_OOB_NET_IFNAME set to %s", userIfEnv);
-        bool searchNot = userIfEnv && userIfEnv[0] == '^';
-        if (searchNot) userIfEnv++;
-        bool searchExact = userIfEnv && userIfEnv[0] == '=';
-        if (searchExact) userIfEnv++;
-        struct netIf userIfs[MAX_OOB_DEVS];
-        int nUserIfs = parseStringList(userIfEnv, userIfs, MAX_OOB_DEVS);
-        // loop over the device and return the first one matching
-        int devId = 0;
-        int nDev = 0;
-        NCCLCHECK(comm->ncclNet->devices(&nDev));
-        while (devId < nDev) {
-          ncclNetProperties_t props;
-          comm->ncclNet->getProperties(devId, &props);
-          // check against user specified HCAs/ports
-          bool found = matchIfList(props.name, props.port, userIfs, nUserIfs, searchExact) ^ searchNot;
-          if (found) {
-            devOOB = devId;
-            break;
-          }
-          devId++;
-        }
-        if (devOOB == -1) {
-          WARN("no device found matching NCCL_OOB_NET_IFNAME=%s, ignoring", userIfEnv);
-          goto noEnv;
-        }
-      } else {
-      noEnv:
-        // default choice is device 0
-        devOOB = 0;
-      }
-    }
-    pthread_mutex_unlock(&bootstrapNetLock);
-  }
-  *dev = devOOB;
-  return ncclSuccess;
-}
 
 static ncclResult_t netRingConnect(ncclNet_t* net, struct bootstrapListen_t* listen, char peerHandle[NCCL_NET_HANDLE_MAXSIZE],
                                    void** sendComm, ncclNetDeviceHandle_t** sendDevHandle,
