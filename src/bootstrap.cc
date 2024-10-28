@@ -470,12 +470,6 @@ static ncclResult_t createListenSocket(struct ncclComm* comm, uint64_t magic, st
   NCCLCHECK(ncclSocketGetAddr(socket, addr));
   return ncclSuccess;
 }
-static ncclResult_t getUDS(uint64_t* peerUDS) {
-  uint64_t randId;
-  NCCLCHECK(getRandomData(&randId, sizeof(randId)));
-  *peerUDS = getPidHash() + randId;
-  return ncclSuccess;
-}
 #define MAX_OOB_DEVS 16
 static ncclResult_t netGetDevice(int rank, struct ncclComm* comm, int* dev) {
   static int devOOB = -1;
@@ -724,82 +718,6 @@ ncclResult_t bootstrapInit(int nHandles, void* handles, struct ncclComm* comm) {
        timers[BOOTSTRAP_INIT_TIME_DELAY] / 1e9);
 
   return ncclSuccess;
-}
-
-ncclResult_t bootstrapSplit(uint64_t magic, struct ncclComm* comm, struct ncclComm* parent, int color, int key, int* parentRanks) {
-  ncclResult_t ret = ncclSuccess;
-  int rank = comm->rank;
-  int nranks = comm->nRanks;
-  int prev, next;
-  union ringConnectInfo info;
-  union ringConnectInfo nextPeer;
-  struct ncclSocket* proxySocket = NULL;
-  struct bootstrapState* state;
-
-  NCCLCHECKGOTO(ncclCalloc(&state, 1), ret, fail);
-  state->rank = rank;
-  state->nranks = nranks;
-  state->cudaDev = comm->cudaDev;
-  state->abortFlag = comm->abortFlag;
-  state->net = comm->ncclNet;
-  comm->bootstrap = state;
-  comm->magic = state->magic = magic;
-
-  prev = parentRanks[(rank - 1 + nranks) % nranks];
-  next = parentRanks[(rank + 1) % nranks];
-
-  // create a handle for the others to reach out to me
-  // if (ncclParamBootstrapNetEnable()) {
-  //   NCCLCHECKGOTO(netGetDevice(rank, comm, &STATE_LISTEN(state, net.dev)), ret, fail);
-  //   NCCLCHECKGOTO(state->net->listen(STATE_LISTEN(state, net.dev), STATE_LISTEN(state, net.handle), &STATE_LISTEN(state, net.comm)), ret, fail);
-  //   memcpy(info.handle, STATE_LISTEN(state, net.handle), NCCL_NET_HANDLE_MAXSIZE);
-  // } else {
-    // create socket for ring neightbor to contact mee
-    NCCLCHECK(createListenSocket(comm, comm->magic, &STATE_LISTEN(state, socket), &info.addr, ncclSocketTypeBootstrap));
-  // }
-  // create a socket for others to reach out (P2P)
-  union ncclSocketAddress peerSocketAddress;
-  NCCLCHECK(createListenSocket(comm, comm->magic, &STATE_LISTEN(state, peerSocket), &peerSocketAddress, ncclSocketTypeBootstrap));
-
-  // Get addr from next rank using the parent's connections
-  NCCLCHECKGOTO(bootstrapSend(parent->bootstrap, prev, BOOTSTRAP_TAG_COMMSPLIT, &info, sizeof(union ringConnectInfo)), ret, fail);
-  NCCLCHECKGOTO(bootstrapRecv(parent->bootstrap, next, BOOTSTRAP_TAG_COMMSPLIT, &nextPeer, sizeof(union ringConnectInfo)), ret, fail);
-  // if (ncclParamBootstrapNetEnable()) {
-  //   NCCLCHECKGOTO(netRingConnect(state->net, &state->listen, nextPeer.handle,
-  //                                &STATE_RING(state, net.sendComm), &STATE_RING(state, net.sendDevHandle),
-  //                                &STATE_RING(state, net.recvComm), &STATE_RING(state, net.recvDevHandle), state->abortFlag),
-  //                 ret, fail);
-  // } else {
-    NCCLCHECK(socketRingConnect(&nextPeer.addr, &STATE_RING(state, socket.send), &STATE_LISTEN(state, socket), &STATE_RING(state, socket.recv), comm->magic, state->abortFlag));
-  // }
-
-  NCCLCHECKGOTO(ncclCalloc(&state->peerP2pAddresses, nranks * sizeof(union ncclSocketAddress)), ret, fail);
-  memcpy(state->peerP2pAddresses + rank, &peerSocketAddress, sizeof(union ncclSocketAddress));
-  if (parent->config.splitShare) {
-    /* map local rank to top parent local rank. */
-    for (int i = 0; i < nranks; ++i) {
-      comm->topParentRanks[i] = parent->topParentRanks[parentRanks[i]];
-    }
-    NCCLCHECKGOTO(ringAllInfo(comm, state, state->peerP2pAddresses, NULL, NULL), ret, fail);
-  } else {
-    NCCLCHECKGOTO(ncclCalloc(&state->peerProxyAddresses, nranks), ret, fail);
-    NCCLCHECKGOTO(ncclCalloc(&state->peerProxyAddressesUDS, nranks), ret, fail);
-    // Create the service proxy and get the UDS
-    NCCLCHECKGOTO(ncclCalloc(&proxySocket, 1), ret, fail);
-    NCCLCHECKGOTO(getUDS(state->peerProxyAddressesUDS + rank), ret, fail);
-    NCCLCHECKGOTO(createListenSocket(comm, comm->magic, proxySocket, state->peerProxyAddresses + rank, ncclSocketTypeProxy), ret, fail);
-    NCCLCHECKGOTO(ringAllInfo(comm, state, state->peerP2pAddresses, state->peerProxyAddresses, state->peerProxyAddressesUDS), ret, fail);
-    NCCLCHECKGOTO(ncclProxyInit(comm, proxySocket, state->peerProxyAddresses, state->peerProxyAddressesUDS), ret, fail);
-  }
-
-  TRACE(NCCL_BOOTSTRAP, "bootstrapSplit: comm %p parent %p rank %d nranks %d color %d key %d prev %d next %d - DONE", comm, parent, rank, nranks,
-        color, key, prev, next);
-
-exit:
-  return ret;
-fail:
-  free(proxySocket);
-  goto exit;
 }
 
 struct socketAckInfo {
