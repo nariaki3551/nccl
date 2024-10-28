@@ -148,50 +148,6 @@ static ncclResult_t netDereg(ncclNet_t* net, void* comm, void** handle) {
   *handle = NULL;
   return ncclSuccess;
 }
-static ncclResult_t netIsend(ncclNet_t* net, void* sendComm, void* data, int size, void* dataHandle, int tag, void** sendReq,
-                             int* done) {
-  if (*done) return ncclSuccess;
-  if (!*sendReq) {
-    NCCLCHECK(net->isend(sendComm, data, size, tag, dataHandle, sendReq));
-  }
-  if (*sendReq) {
-    NCCLCHECK(net->test(*sendReq, done, NULL));
-    if (*done) {
-      *sendReq = NULL;
-    }
-  }
-  return ncclSuccess;
-}
-static ncclResult_t netIrecv(ncclNet_t* net, void* recvComm, void* data, int size, void* dataHandle, int tag, void** recvReq,
-                             int* done) {
-  if (*done) return ncclSuccess;
-  if (!*recvReq) {
-    NCCLCHECK(net->irecv(recvComm, 1, &data, &size, &tag, &dataHandle, recvReq));
-  }
-  if (*recvReq) {
-    NCCLCHECK(net->test(*recvReq, done, NULL));
-    if (*done) {
-      *recvReq = NULL;
-    }
-  }
-  return ncclSuccess;
-}
-static ncclResult_t netSendRecv(ncclNet_t* net, void* sendComm, void* sendData, int sendSize, void* sendDataHandle, void* recvComm,
-                                void* recvData, int recvSize, void* recvDataHandle, int tag, volatile uint32_t* abortFlag) {
-  int abortCounter = 0;
-  int doneSend = 0, doneRecv = 0;
-  void *sendReq = NULL, *recvReq = NULL;
-  do {
-    NCCLCHECK(checkAbort(abortFlag, &abortCounter));
-    if (!doneRecv) {
-      NCCLCHECK(netIrecv(net, recvComm, recvData, recvSize, recvDataHandle, tag, &recvReq, &doneRecv));
-    }
-    if (!doneSend) {
-      NCCLCHECK(netIsend(net, sendComm, sendData, sendSize, sendDataHandle, tag, &sendReq, &doneSend));
-    }
-  } while (!doneSend || !doneRecv);
-  return ncclSuccess;
-}
 
 // Additional socket based functions, first send the size, then send the message
 static ncclResult_t socketSend(struct ncclSocket* sock, void* data, int size) {
@@ -796,39 +752,6 @@ fail:
   return ret;
 }
 
-static ncclResult_t netRingAllGather(ncclNet_t* net, void* sendComm, void* recvComm, int rank, int nranks, char* data, int size, volatile uint32_t* abortFlag) {
-  ncclResult_t res;
-  uint64_t tFirst = 0, tRest = 0;
-  void* sendDataHandle = NULL;
-  void* recvDataHandle = NULL;
-  NCCLCHECKGOTO(netReg(net, sendComm, data, nranks * size, &sendDataHandle), res, exit);
-  NCCLCHECKGOTO(netReg(net, recvComm, data, nranks * size, &recvDataHandle), res, exit);
-  /* Simple ring based AllGather
-   * At each step i receive data from (rank-i-1) from prev
-   * and send previous step's data from (rank-i) to next
-   */
-  TRACE(NCCL_BOOTSTRAP, "NetRingAllGather started");
-  BOOTSTRAP_PROF_OPEN(tFirst);
-  for (int i = 0; i < nranks - 1; i++) {
-    int tag = i;
-    size_t rslice = (rank - i - 1 + nranks) % nranks;
-    size_t sslice = (rank - i + nranks) % nranks;
-    void* recv_data = data + rslice * size;
-    void* send_data = data + sslice * size;
-    NCCLCHECKGOTO(netSendRecv(net, sendComm, send_data, size, sendDataHandle, recvComm, recv_data, size, recvDataHandle, tag, abortFlag), res, exit);
-    if (i == 0) {
-      BOOTSTRAP_PROF_CLOSE(tFirst);
-      BOOTSTRAP_PROF_OPEN(tRest);
-    }
-  }
-  BOOTSTRAP_PROF_CLOSE(tRest);
-  TRACE(NCCL_BOOTSTRAP | NCCL_PROFILE, "netRingAllGather first message in %f (%f MB/sec), rest in %f (%f MB/sec)", tFirst / 1e9, (size / 1e6) / (tFirst / 1e9), tRest / 1e9, (nranks - 1) * (size / 1e6) / (tRest / 1e9));
-exit:
-  // do not fail in case of error, try to deregister as much as possible
-  if (sendDataHandle) netDereg(net, sendComm, &sendDataHandle);
-  if (recvDataHandle) netDereg(net, recvComm, &recvDataHandle);
-  return res;
-}
 static ncclResult_t socketRingAllGather(struct ncclSocket* sendSock, struct ncclSocket* recvSock, int rank, int nranks, char* data, int size) {
   ncclResult_t res = ncclSuccess;
   uint64_t tFirst = 0, tRest = 0;
@@ -864,9 +787,10 @@ ncclResult_t bootstrapAllGather(void* commState, void* allData, int size) {
 
   uint64_t time = 0;
   BOOTSTRAP_PROF_OPEN(time);
-  if (ncclParamBootstrapNetEnable()) {
-    NCCLCHECKGOTO(netRingAllGather(state->net, STATE_RING(state, net.sendComm), STATE_RING(state, net.recvComm), rank, nranks, (char*)allData, size, state->abortFlag), res, exit);
-  } else {
+  // if (ncclParamBootstrapNetEnable()) {
+  //   NCCLCHECKGOTO(netRingAllGather(state->net, STATE_RING(state, net.sendComm), STATE_RING(state, net.recvComm), rank, nranks, (char*)allData, size, state->abortFlag), res, exit);
+  // } else
+  {
     NCCLCHECKGOTO(socketRingAllGather(&STATE_RING(state, socket.send), &STATE_RING(state, socket.recv), rank, nranks, (char*)allData, size), res, exit);
   }
 exit:
@@ -974,11 +898,12 @@ ncclResult_t bootstrapClose(void* commState) {
       return ncclInternalError;
     }
   }
-  if (ncclParamBootstrapNetEnable()) {
-    NCCLCHECK(state->net->closeSend(STATE_RING(state, net.sendComm)));
-    NCCLCHECK(state->net->closeRecv(STATE_RING(state, net.recvComm)));
-    NCCLCHECK(state->net->closeListen(STATE_LISTEN(state, net.comm)));
-  } else {
+  // if (ncclParamBootstrapNetEnable()) {
+  //   NCCLCHECK(state->net->closeSend(STATE_RING(state, net.sendComm)));
+  //   NCCLCHECK(state->net->closeRecv(STATE_RING(state, net.recvComm)));
+  //   NCCLCHECK(state->net->closeListen(STATE_LISTEN(state, net.comm)));
+  // } else 
+  {
     NCCLCHECK(ncclSocketClose(&STATE_RING(state, socket.send)));
     NCCLCHECK(ncclSocketClose(&STATE_RING(state, socket.recv)));
     NCCLCHECK(ncclSocketClose(&STATE_LISTEN(state, socket)));
