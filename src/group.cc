@@ -308,13 +308,6 @@ static void groupCleanup(struct ncclComm** groupCommHeadPtr, struct ncclComm** g
       }
     }
 
-    { // Reset comm->planner to empty.
-      ncclKernelPlanner::Peer* tmp = comm->planner.peers;
-      memset(&comm->planner, 0, sizeof(comm->planner));
-      comm->planner.peers = tmp;
-      if (comm->planner.peers != NULL) memset(comm->planner.peers, 0, comm->nRanks*sizeof(comm->planner.peers[0]));
-    }
-
     if (!comm->config.blocking)
       (void) ncclCommSetAsyncError(comm, error);
     comm = next;

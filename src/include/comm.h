@@ -339,13 +339,7 @@ struct ncclKernelPlanner {
   // State for accumulating tasks between ncclGroupStart/End()
   //////////////////////////////////////////////////////////////////////////////
 
-  struct Peer {
-    bool sendSeen, recvSeen;
-    struct ncclIntruQueue<struct ncclTaskP2p, &ncclTaskP2p::next> sendQueue;
-    struct ncclIntruQueue<struct ncclTaskP2p, &ncclTaskP2p::next> recvQueue;
-  };
   struct ncclTaskCollSorter collSorter;
-  struct Peer* peers/*[nRanks]*/;
   int nTasksColl;
   bool persistent;
 

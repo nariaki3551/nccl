@@ -726,7 +726,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   ncclResult_t ret = ncclSuccess;
   int rank = comm->rank;
   int nranks = comm->nRanks;
-  int nNodes = 1;
+  // int nNodes = 1;
   cpu_set_t affinitySave;
   struct ncclTopoGraph* ringGraph = &comm->graphs[NCCL_ALGO_RING];
   struct ncclTopoGraph* treeGraph = &comm->graphs[NCCL_ALGO_TREE];
@@ -785,7 +785,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   //     goto fail;
   //   }
   // }
-  nNodes = 2; // 本来は上記のforでhostHashを見てノード数を算出
+  // nNodes = 2; // 本来は上記のforでhostHashを見てノード数を算出
   // AllGather1 - end
   timers[TIMER_INIT_ALLGATHER] = clockNano() - timers[TIMER_INIT_ALLGATHER];
 
@@ -1139,7 +1139,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     int nNodesPow2 = pow2Up(nNodes);
     int nLocalsPow2 = pow2Up(nLocals);
     comm->p2pSchedule = ncclMemoryStackAlloc<ncclComm::P2pSchedulePair>(&comm->memPermanent, nRanks);
-    comm->planner.peers = ncclMemoryStackAlloc<ncclKernelPlanner::Peer>(&comm->memPermanent, nRanks);
     uint32_t nodeRound = 0;
     uint32_t nodeDelta = 0;
     int round = 0;

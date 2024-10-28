@@ -117,10 +117,6 @@ inline void ncclGroupCommJoin(struct ncclComm* comm) {
     // Comms gets a new memory stack scope upon joining. Each task batched for
     // this comm is allocated there.
     ncclMemoryStackPush(&comm->memScoped);
-    // Initialize planner
-    ncclKernelPlanner::Peer* tmp = comm->planner.peers;
-    memset(&comm->planner, 0, sizeof(comm->planner));
-    comm->planner.peers = tmp;
   }
 
   ncclGroupBlocking = comm->config.blocking;
