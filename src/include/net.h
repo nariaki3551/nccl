@@ -24,6 +24,5 @@ int ncclNetVersion(struct ncclComm* comm);
 ncclResult_t ncclGpuGdrSupport(struct ncclComm* comm, int* gdrSupport);
 
 extern ncclNet_t ncclNetIb;
-extern ncclNet_t ncclNetSocket;
 
 #endif

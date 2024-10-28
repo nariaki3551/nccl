@@ -329,7 +329,7 @@ static ncclResult_t ncclCollNet_v7_as_v8_init(ncclDebugLogger_t logfn) {
 }
 
 static pthread_mutex_t netLock = PTHREAD_MUTEX_INITIALIZER;
-ncclNet_t* ncclNets[3] = { nullptr, &ncclNetIb, &ncclNetSocket };
+ncclNet_t* ncclNets[3] = { nullptr, &ncclNetIb, nullptr };
 ncclCollNet_t* ncclCollNets[3] = { nullptr, nullptr, nullptr };
 enum ncclNetState {
   ncclNetStateInit = 0,
