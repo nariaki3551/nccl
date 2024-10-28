@@ -279,7 +279,7 @@ static ncclResult_t registerCollBuffers(
   *regNeedConnect = true;
   if (!(ncclParamLocalRegister() || (comm->planner.persistent && ncclParamGraphRegister()))) goto exit;
 #if CUDART_VERSION >= 11030
-   if ((info->algorithm == NCCL_ALGO_COLLNET_DIRECT || info->algorithm == NCCL_ALGO_COLLNET_CHAIN) && comm->collNetRegSupport && info->opDev.op != ncclDevPreMulSum && info->opDev.op != ncclDevSumPostDiv) {
+   if ((info->algorithm == NCCL_ALGO_COLLNET_DIRECT || info->algorithm == NCCL_ALGO_COLLNET_CHAIN) && comm->collNetRegSupport) {
     size_t elementSize = ncclTypeSize(info->datatype);
     size_t sendbuffSize = elementSize*ncclFuncSendCount(info->func, comm->nRanks, info->count);
     // size_t recvbuffSize = elementSize*ncclFuncRecvCount(info->func, comm->nRanks, info->count);
@@ -1320,9 +1320,6 @@ static inline ncclResult_t getCollNetSupport(
   ) {
   // Translate ncclAvg and PreMulSum
   ncclRedOp_t netOp = info->opHost;
-  if (info->opDev.op == ncclDevPreMulSum || info->opDev.op == ncclDevSumPostDiv) {
-    netOp = ncclSum;
-  }
   *collNetSupport = comm->collNetSupport;
   switch (info->func) {
   case ncclFuncAllReduce:
@@ -1367,8 +1364,6 @@ static ncclResult_t updateCollCostTable(
     /* now we only support single-node NVLS allgather and reducescatter */
     if (a == NCCL_ALGO_NVLS && (info->func == ncclFuncAllGather || info->func == ncclFuncReduceScatter) && comm->nNodes > 1) continue;
     /* Tree reduceScatter doesn't support scaling yet */
-    if (a == NCCL_ALGO_PAT && info->func == ncclFuncReduceScatter
-        && (info->opDev.op == ncclDevPreMulSum || info->opDev.op == ncclDevSumPostDiv)) continue;
     for (int p=0; p<NCCL_NUM_PROTOCOLS; p++) {
       bool backup;
       float time;
@@ -1609,11 +1604,7 @@ static ncclResult_t calcCollChunking(
   proxyOp->chunkSize = chunkSize;
   proxyOp->protocol = info->protocol;
   proxyOp->dtype = info->datatype;
-  if (info->opDev.op == ncclDevPreMulSum || info->opDev.op == ncclDevSumPostDiv) {
-    proxyOp->redOp = ncclSum; // Network sees avg as sum
-  } else {
-    proxyOp->redOp = info->opHost;
-  }
+  proxyOp->redOp = info->opHost;
   proxyOp->pattern = pattern;
   proxyOp->coll = info->func;
   proxyOp->root = info->root;
@@ -1669,52 +1660,9 @@ static ncclResult_t hostToDevRedOp(
 
   int nbits = 8*ncclTypeSize(datatype);
   if (nbits <= 0) return ncclInvalidArgument;
-  uint64_t allBits = uint64_t(-1)>>(64-nbits);
-  uint64_t signBit = allBits^(allBits>>1);
 
   switch (int(op)) {
   case ncclSum:  opFull->op = ncclDevSum;  break;
-  case ncclProd: opFull->op = ncclDevProd; break;
-  case ncclMin:
-  case ncclMax:
-    opFull->op = ncclDevMinMax;
-    opFull->scalarArg = 0;
-    // The xormask used by ncclFuncMinMax<[u]int> is the XOR of the sign bit
-    // for signed (opposed to unsigned) types and all the bits for max (opposed to min).
-    if (datatype==ncclInt8 || datatype==ncclInt32 || datatype==ncclInt64) {
-      opFull->scalarArg ^= signBit;
-    }
-    opFull->scalarArg ^= (op == ncclMax) ? allBits : 0;
-    break;
-  case ncclAvg:
-    switch ((int)datatype) {
-    case ncclInt8:  case ncclInt32:  case ncclInt64:
-    case ncclUint8: case ncclUint32: case ncclUint64:
-      opFull->op = ncclDevSumPostDiv;
-      u64 = comm->nRanks;
-      break;
-    case ncclFloat16:
-      opFull->op = ncclDevPreMulSum;
-      f16 = __float2half(float(1.0/comm->nRanks)); // __double2half not supported pre CUDA 11.x
-      break;
-    #if defined(__CUDA_BF16_TYPES_EXIST__)
-    case ncclBfloat16:
-      opFull->op = ncclDevPreMulSum;
-      bf16 = __float2bfloat16(float(1.0/comm->nRanks));
-      break;
-    #endif
-    case ncclFloat32:
-      opFull->op = ncclDevPreMulSum;
-      f32 = float(1.0/comm->nRanks);
-      break;
-    case ncclFloat64:
-      opFull->op = ncclDevPreMulSum;
-      f64 = 1.0/comm->nRanks;
-      break;
-    }
-    opFull->scalarArgIsPtr = false;
-    opFull->scalarArg = u64;
-    break;
   default: // user created
     int ix = int(ncclUserRedOpMangle(comm, op)) - int(ncclNumOps);
     ncclUserRedOp *user = &comm->userRedOps[ix];
