@@ -21,8 +21,6 @@ ncclResult_t bootstrapCreateRoot(struct ncclBootstrapHandle* handle, bool idFrom
 ncclResult_t bootstrapGetUniqueId(struct ncclBootstrapHandle* handle);
 ncclResult_t bootstrapInit(int nHandles, void* handle, struct ncclComm* comm);
 ncclResult_t bootstrapAllGather(void* commState, void* allData, int size);
-ncclResult_t bootstrapSend(void* commState, int peer, int tag, void* data, int size);
-ncclResult_t bootstrapRecv(void* commState, int peer, int tag, void* data, int size);
 ncclResult_t bootstrapBarrier(void* commState, int rank, int nranks, int tag);
 ncclResult_t bootstrapBroadcast(void* commState, int rank, int nranks, int root, void* bcastData, int size);
 ncclResult_t bootstrapClose(void* commState);

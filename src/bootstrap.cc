@@ -427,20 +427,6 @@ static ncclResult_t createListenSocket(struct ncclComm* comm, uint64_t magic, st
   return ncclSuccess;
 }
 
-static ncclResult_t netRingConnect(ncclNet_t* net, struct bootstrapListen_t* listen, char peerHandle[NCCL_NET_HANDLE_MAXSIZE],
-                                   void** sendComm, ncclNetDeviceHandle_t** sendDevHandle,
-                                   void** recvComm, ncclNetDeviceHandle_t** recvDevHandle, volatile uint32_t* abortFlag) {
-
-  int abortCounter = 0;
-  do {
-    NCCLCHECK(checkAbort(abortFlag, &abortCounter));
-    if (!*sendComm)
-      NCCLCHECK(net->connect(listen->net.dev, peerHandle, sendComm, sendDevHandle));
-    if (!*recvComm)
-      NCCLCHECK(net->accept(listen->net.comm, recvComm, recvDevHandle));
-  } while (!*sendComm || !*recvComm);
-  return ncclSuccess;
-}
 static ncclResult_t socketRingConnect(ncclSocketAddress* addr, struct ncclSocket* sendSocket, struct ncclSocket* listenSock, struct ncclSocket* recvSocket, uint64_t magic, volatile uint32_t* abortFlag) {
   NCCLCHECK(ncclSocketInit(sendSocket, addr, magic, ncclSocketTypeBootstrap, abortFlag));
   NCCLCHECK(ncclSocketConnect(sendSocket));
@@ -631,127 +617,6 @@ ncclResult_t bootstrapInit(int nHandles, void* handles, struct ncclComm* comm) {
   return ncclSuccess;
 }
 
-struct socketAckInfo {
-  int rank;
-  int tag;
-};
-static ncclResult_t socketConnect(void* commState, int peer, int tag, struct ncclSocket* sock) {
-  ncclResult_t ret = ncclSuccess;
-  struct bootstrapState* state = (struct bootstrapState*)commState;
-
-  struct socketAckInfo ack = (struct socketAckInfo){.rank = state->rank, .tag = tag};
-  NCCLCHECKGOTO(ncclSocketInit(sock, state->peerP2pAddresses + peer, state->magic, ncclSocketTypeBootstrap), ret, fail);
-  NCCLCHECKGOTO(ncclSocketConnect(sock), ret, fail);
-  NCCLCHECKGOTO(socketSend(sock, &ack, sizeof(struct socketAckInfo)), ret, fail);
-  return ncclSuccess;
-fail:
-  (void)ncclSocketClose(sock);
-  return ret;
-}
-ncclResult_t bootstrapSend(void* commState, int peer, int tag, void* data, int size) {
-  ncclResult_t ret = ncclSuccess;
-  struct ncclSocket sock;
-  TRACE(NCCL_BOOTSTRAP, "Sending to peer=%d tag=%d size=%d", peer, tag, size);
-  NCCLCHECK(socketConnect(commState, peer, tag, &sock));
-  NCCLCHECKGOTO(socketSend(&sock, data, size), ret, fail);
-  TRACE(NCCL_BOOTSTRAP, "Sent to peer=%d tag=%d size=%d", peer, tag, size);
-  NCCLCHECK(ncclSocketClose(&sock));
-  return ret;
-fail:
-  (void)ncclSocketClose(&sock);
-  return ret;
-}
-// Bootstrap send/receive functions
-static ncclResult_t unexpectedEnqueue(struct bootstrapState* state, int peer, int tag, struct ncclSocket* sock) {
-  // New unex
-  struct unexConn* unex;
-  NCCLCHECK(ncclCalloc(&unex, 1));
-  unex->peer = peer;
-  unex->tag = tag;
-  memcpy(&unex->sock, sock, sizeof(struct ncclSocket));
-
-  // Enqueue
-  struct unexConn* list = state->unexpectedConnections;
-  if (list == NULL) {
-    state->unexpectedConnections = unex;
-    return ncclSuccess;
-  }
-  while (list->next) list = list->next;
-  list->next = unex;
-  return ncclSuccess;
-}
-static ncclResult_t unexpectedDequeue(struct bootstrapState* state, int peer, int tag, struct ncclSocket* sock, int* found) {
-  struct unexConn* elem = state->unexpectedConnections;
-  struct unexConn* prev = NULL;
-  *found = 0;
-  while (elem) {
-    if (elem->peer == peer && elem->tag == tag) {
-      if (prev == NULL) {
-        state->unexpectedConnections = elem->next;
-      } else {
-        prev->next = elem->next;
-      }
-      memcpy(sock, &elem->sock, sizeof(struct ncclSocket));
-      free(elem);
-      *found = 1;
-      return ncclSuccess;
-    }
-    prev = elem;
-    elem = elem->next;
-  }
-  return ncclSuccess;
-}
-
-static void unexpectedFree(struct bootstrapState* state) {
-  struct unexConn* elem = state->unexpectedConnections;
-  struct unexConn* prev = NULL;
-
-  while (elem) {
-    prev = elem;
-    elem = elem->next;
-    free(prev);
-  }
-  return;
-}
-
-// We can't know who we'll receive from, so we need to receive everything at once
-static ncclResult_t socketAccept(void* commState, int peer, int tag, struct ncclSocket* sock) {
-  ncclResult_t ret = ncclSuccess;
-  struct bootstrapState* state = (struct bootstrapState*)commState;
-
-  // Search unexpected connections first
-  int found;
-  NCCLCHECK(unexpectedDequeue(state, peer, tag, sock, &found));
-  if (found) return ncclSuccess;
-
-  // Then look for new connections
-  while (1) {
-    struct socketAckInfo ack = {0};
-    NCCLCHECKGOTO(ncclSocketInit(sock), ret, fail);
-    NCCLCHECKGOTO(ncclSocketAccept(sock, &STATE_LISTEN(state, peerSocket)), ret, fail);
-    NCCLCHECKGOTO(socketRecv(sock, &ack, sizeof(struct socketAckInfo)), ret, fail);
-    if (ack.rank == peer && ack.tag == tag) return ncclSuccess;
-    NCCLCHECKGOTO(unexpectedEnqueue(state, ack.rank, ack.tag, sock), ret, fail);
-  }
-  return ncclSuccess;
-fail:
-  (void)ncclSocketClose(sock);
-  return ret;
-}
-// We can't know who we'll receive from, so we need to receive everything at once
-ncclResult_t bootstrapRecv(void* commState, int peer, int tag, void* data, int size) {
-  ncclResult_t ret;
-  struct ncclSocket sock;
-  NCCLCHECK(socketAccept(commState, peer, tag, &sock));
-  TRACE(NCCL_BOOTSTRAP, "Receiving tag=%d peer=%d size=%d", tag, peer, size);
-  NCCLCHECKGOTO(socketRecv(&sock, ((char*)data), size), ret, fail);
-  NCCLCHECK(ncclSocketClose(&sock));
-  return ret;
-fail:
-  (void)ncclSocketClose(&sock);
-  return ret;
-}
-
 static ncclResult_t socketRingAllGather(struct ncclSocket* sendSock, struct ncclSocket* recvSock, int rank, int nranks, char* data, int size) {
   ncclResult_t res = ncclSuccess;
   uint64_t tFirst = 0, tRest = 0;
@@ -800,45 +665,18 @@ exit:
   return res;
 }
 
-static ncclResult_t bootstrapP2PBarrier(void* commState, int* ranks, int rank, int nranks, int tag) {
-  if (nranks == 1)
-    return ncclSuccess;
-  /* Simple [intra] process barrier
-   *
-   * Based on the dissemination algorithm by Debra Hensgen, Raphael Finkel, and Udi Manbet,
-   * "Two Algorithms for Barrier Synchronization," International Journal of Parallel Programming, 17(1):1-17, 1988"
-   */
-  int data[1];
-  for (int mask = 1; mask < nranks; mask <<= 1) {
-    int src = (rank - mask + nranks) % nranks;
-    int dst = (rank + mask) % nranks;
-    NCCLCHECK(bootstrapSend(commState, ranks ? ranks[dst] : dst, tag, data, sizeof(data)));
-    NCCLCHECK(bootstrapRecv(commState, ranks ? ranks[src] : src, tag, data, sizeof(data)));
-  }
-  return ncclSuccess;
-}
-
-ncclResult_t bootstrapIntraNodeBarrier(void* commState, int* ranks, int rank, int nranks, int tag) {
-  uint64_t time = 0;
-  BOOTSTRAP_PROF_OPEN(time);
-  NCCLCHECK(bootstrapP2PBarrier(commState, ranks, rank, nranks, tag));
-  BOOTSTRAP_PROF_CLOSE(time);
-  TRACE(NCCL_BOOTSTRAP | NCCL_PROFILE, "bootstrapIntraNodeBarrier done in %f sec", time / 1e9);
-  return ncclSuccess;
-}
-
 ncclResult_t bootstrapClose(void* commState) {
   if (commState == NULL)
     return ncclSuccess;
   struct bootstrapState* state = (struct bootstrapState*)commState;
   // close unexpected and return an error if we are not aborting and still operations in the pipe
-  if (state->unexpectedConnections != NULL) {
-    unexpectedFree(state);
-    if (__atomic_load_n(state->abortFlag, __ATOMIC_ACQUIRE) == 0) {
-      WARN("Unexpected connections are not empty");
-      return ncclInternalError;
-    }
-  }
+  // if (state->unexpectedConnections != NULL) {
+  //   unexpectedFree(state);
+  //   if (__atomic_load_n(state->abortFlag, __ATOMIC_ACQUIRE) == 0) {
+  //     WARN("Unexpected connections are not empty");
+  //     return ncclInternalError;
+  //   }
+  // }
   // if (ncclParamBootstrapNetEnable()) {
   //   NCCLCHECK(state->net->closeSend(STATE_RING(state, net.sendComm)));
   //   NCCLCHECK(state->net->closeRecv(STATE_RING(state, net.recvComm)));
