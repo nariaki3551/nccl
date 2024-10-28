@@ -1152,75 +1152,75 @@ static int calcP2pChannelCount(size_t totalSize, int minChannels, int maxChannel
   return nChannels;
 }
 
-static ncclResult_t scheduleP2pTasksToPlan(
-    struct ncclComm* comm, struct ncclKernelPlan* plan, struct ncclKernelPlanBudget* budget
-  ) {
-  int nRanks = comm->nRanks;
-  struct ncclKernelPlanner::Peer* peers = comm->planner.peers;
+// static ncclResult_t scheduleP2pTasksToPlan(
+//     struct ncclComm* comm, struct ncclKernelPlan* plan, struct ncclKernelPlanBudget* budget
+//   ) {
+//   int nRanks = comm->nRanks;
+//   struct ncclKernelPlanner::Peer* peers = comm->planner.peers;
 
-  plan->threadPerBlock = std::max(plan->threadPerBlock, NCCL_MAX_NTHREADS);
-  if (!plan->kernelSpecialized) {
-    plan->kernelFn = ncclDevKernelForFunc[ncclDevFuncId_P2p()];
-    plan->kernelSpecialized = ncclDevKernelForFuncIsSpecialized[ncclDevFuncId_P2p()];
-  }
+//   plan->threadPerBlock = std::max(plan->threadPerBlock, NCCL_MAX_NTHREADS);
+//   if (!plan->kernelSpecialized) {
+//     plan->kernelFn = ncclDevKernelForFunc[ncclDevFuncId_P2p()];
+//     plan->kernelSpecialized = ncclDevKernelForFuncIsSpecialized[ncclDevFuncId_P2p()];
+//   }
 
-  // Compute how much to split operations
-  // Try to use all channels
-  int nChannelsMax = comm->p2pnChannelsPerPeer;
-  int nChannelsMin = nChannelsMax;
-  // Try to use all channels, but one channel per operation.
-  while (nChannelsMin*nRanks > comm->p2pnChannels && nChannelsMin > 1) nChannelsMin /= 2;
+//   // Compute how much to split operations
+//   // Try to use all channels
+//   int nChannelsMax = comm->p2pnChannelsPerPeer;
+//   int nChannelsMin = nChannelsMax;
+//   // Try to use all channels, but one channel per operation.
+//   while (nChannelsMin*nRanks > comm->p2pnChannels && nChannelsMin > 1) nChannelsMin /= 2;
 
-  while (comm->planner.nTasksP2p != 0) {
-    for (int round=0; round < nRanks; round++) {
-      int sendRank = comm->p2pSchedule[round].sendRank;
-      int recvRank = comm->p2pSchedule[round].recvRank;
-      struct ncclTaskP2p* send = ncclIntruQueueHead(&peers[sendRank].sendQueue);
-      struct ncclTaskP2p* recv = ncclIntruQueueHead(&peers[recvRank].recvQueue);
-      if (send == nullptr && recv == nullptr) continue;
+//   while (comm->planner.nTasksP2p != 0) {
+//     for (int round=0; round < nRanks; round++) {
+//       int sendRank = comm->p2pSchedule[round].sendRank;
+//       int recvRank = comm->p2pSchedule[round].recvRank;
+//       struct ncclTaskP2p* send = ncclIntruQueueHead(&peers[sendRank].sendQueue);
+//       struct ncclTaskP2p* recv = ncclIntruQueueHead(&peers[recvRank].recvQueue);
+//       if (send == nullptr && recv == nullptr) continue;
 
-      if (sendRank == comm->rank) {
-        if (send != nullptr && recv == nullptr) {
-          WARN("Trying to send to self without a matching recv");
-          return ncclInvalidUsage;
-        }
-        if (send == nullptr && recv != nullptr) {
-          WARN("Trying to recv to self without a matching send");
-          return ncclInvalidUsage;
-        }
-      }
-      ssize_t sendBytes = send ? send->bytes : -1;
-      ssize_t recvBytes = recv ? recv->bytes : -1;
-      void* sendBuff = send ? send->buff : nullptr;
-      void* recvBuff = recv ? recv->buff : nullptr;
+//       if (sendRank == comm->rank) {
+//         if (send != nullptr && recv == nullptr) {
+//           WARN("Trying to send to self without a matching recv");
+//           return ncclInvalidUsage;
+//         }
+//         if (send == nullptr && recv != nullptr) {
+//           WARN("Trying to recv to self without a matching send");
+//           return ncclInvalidUsage;
+//         }
+//       }
+//       ssize_t sendBytes = send ? send->bytes : -1;
+//       ssize_t recvBytes = recv ? recv->bytes : -1;
+//       void* sendBuff = send ? send->buff : nullptr;
+//       void* recvBuff = recv ? recv->buff : nullptr;
 
-      if (sendRank == comm->rank && send->buff == recv->buff) {
-        // Skip send to self in-place (we don't need to support this).
-        ncclIntruQueueDequeue(&peers[sendRank].sendQueue);
-        ncclIntruQueueDequeue(&peers[recvRank].recvQueue);
-        comm->planner.nTasksP2p -= 2;
-      } else {
-        // Ensure room for worst case of one new batch per channel.
-        if (!testBudget(budget, plan->nWorkBatches+nChannelsMax, plan->workBytes + sizeof(struct ncclDevWorkP2p))) {
-          return ncclSuccess;
-        }
-        struct ncclTaskP2p* p2pTasks[2] = { recv, send };
-        NCCLCHECK(addP2pToPlan(comm, plan, nChannelsMin, nChannelsMax, round, sendRank, sendBuff, sendBytes, recvRank, recvBuff, recvBytes, p2pTasks));
-        if (send != nullptr) {
-          ncclIntruQueueDequeue(&peers[sendRank].sendQueue);
-          ncclIntruQueueEnqueue(&plan->p2pTaskQueue, send);
-          comm->planner.nTasksP2p -= 1;
-        }
-        if (recv != nullptr) {
-          ncclIntruQueueDequeue(&peers[recvRank].recvQueue);
-          ncclIntruQueueEnqueue(&plan->p2pTaskQueue, recv);
-          comm->planner.nTasksP2p -= 1;
-        }
-      }
-    }
-  }
-  return ncclSuccess;
-}
+//       if (sendRank == comm->rank && send->buff == recv->buff) {
+//         // Skip send to self in-place (we don't need to support this).
+//         ncclIntruQueueDequeue(&peers[sendRank].sendQueue);
+//         ncclIntruQueueDequeue(&peers[recvRank].recvQueue);
+//         comm->planner.nTasksP2p -= 2;
+//       } else {
+//         // Ensure room for worst case of one new batch per channel.
+//         if (!testBudget(budget, plan->nWorkBatches+nChannelsMax, plan->workBytes + sizeof(struct ncclDevWorkP2p))) {
+//           return ncclSuccess;
+//         }
+//         struct ncclTaskP2p* p2pTasks[2] = { recv, send };
+//         NCCLCHECK(addP2pToPlan(comm, plan, nChannelsMin, nChannelsMax, round, sendRank, sendBuff, sendBytes, recvRank, recvBuff, recvBytes, p2pTasks));
+//         if (send != nullptr) {
+//           ncclIntruQueueDequeue(&peers[sendRank].sendQueue);
+//           ncclIntruQueueEnqueue(&plan->p2pTaskQueue, send);
+//           comm->planner.nTasksP2p -= 1;
+//         }
+//         if (recv != nullptr) {
+//           ncclIntruQueueDequeue(&peers[recvRank].recvQueue);
+//           ncclIntruQueueEnqueue(&plan->p2pTaskQueue, recv);
+//           comm->planner.nTasksP2p -= 1;
+//         }
+//       }
+//     }
+//   }
+//   return ncclSuccess;
+// }
 
 // Spin until its safe to increase comm->workFifoProduced to desiredProduced.
 static void waitWorkFifoAvailable(struct ncclComm* comm, uint32_t desiredProduced) {
@@ -1513,7 +1513,7 @@ ncclResult_t ncclLaunchPrepare(struct ncclComm* comm) {
   // resources from to our memory pools.
   NCCLCHECK(ncclCommPollCallbacks(comm, /*waitSome=*/false));
 
-  if (planner->nTasksColl + planner->nTasksP2p != 0) {
+  if (planner->nTasksColl != 0) {
     do {
       memset(&planner->wipPlan, 0, sizeof(planner->wipPlan));
 
@@ -1537,16 +1537,16 @@ ncclResult_t ncclLaunchPrepare(struct ncclComm* comm) {
       if (planner->nTasksColl != 0) {
         NCCLCHECKGOTO(scheduleCollTasksToPlan(comm, plan, &budget), result, failure);
       }
-      // And only drain p2p tasks once colls are depleted.
-      if (planner->nTasksColl == 0 && planner->nTasksP2p != 0) {
-        NCCLCHECKGOTO(scheduleP2pTasksToPlan(comm, plan, &budget), result, failure);
-      }
+      // // And only drain p2p tasks once colls are depleted.
+      // if (planner->nTasksColl == 0 && planner->nTasksP2p != 0) {
+      //   NCCLCHECKGOTO(scheduleP2pTasksToPlan(comm, plan, &budget), result, failure);
+      // }
       finishPlan(comm, plan);
       if (plan->workBytes != 0) {
         ncclIntruQueueEnqueue(&planner->planQueue, plan);
         nPlans += 1;
       }
-    } while (planner->nTasksColl + planner->nTasksP2p != 0);
+    } while (planner->nTasksColl != 0);
 
     struct ncclKernelPlan* planHead = ncclIntruQueueHead(&planner->planQueue);
     planner->unlaunchedPlansHead = planHead;
@@ -2225,52 +2225,39 @@ static ncclResult_t hostToDevRedOp(
 static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo* info) {
   struct ncclKernelPlanner *planner = &comm->planner;
 
-  if (info->coll == ncclFuncSend || info->coll == ncclFuncRecv) {
-    int peer = info->root;
-    ssize_t nBytes = info->count*ncclTypeSize(info->datatype);
-    bool isSendNotRecv = info->coll == ncclFuncSend;
+  // if (info->coll == ncclFuncSend || info->coll == ncclFuncRecv) {
+  //   int peer = info->root;
+  //   ssize_t nBytes = info->count*ncclTypeSize(info->datatype);
+  //   bool isSendNotRecv = info->coll == ncclFuncSend;
 
-    // Must be in thread local group before tasks can be alloc'd in `comm->memScoped`.
-    ncclGroupCommJoin(info->comm);
-    struct ncclTaskP2p* p2p = ncclMemoryPoolAlloc<struct ncclTaskP2p>(&comm->memPool_ncclTaskP2p, &comm->memPermanent);
-    p2p->func = info->coll;
-    p2p->buff = (void*)info->recvbuff;
-    p2p->count = info->count;
-    p2p->datatype = info->datatype;
-    p2p->root = info->root;
-    p2p->bytes = nBytes;
-    ncclIntruQueueEnqueue(
-      isSendNotRecv ? &planner->peers[peer].sendQueue : &planner->peers[peer].recvQueue,
-      p2p);
-    planner->nTasksP2p += 1;
+  //   // Must be in thread local group before tasks can be alloc'd in `comm->memScoped`.
+  //   ncclGroupCommJoin(info->comm);
+  //   struct ncclTaskP2p* p2p = ncclMemoryPoolAlloc<struct ncclTaskP2p>(&comm->memPool_ncclTaskP2p, &comm->memPermanent);
+  //   p2p->func = info->coll;
+  //   p2p->buff = (void*)info->recvbuff;
+  //   p2p->count = info->count;
+  //   p2p->datatype = info->datatype;
+  //   p2p->root = info->root;
+  //   p2p->bytes = nBytes;
+  //   ncclIntruQueueEnqueue(
+  //     isSendNotRecv ? &planner->peers[peer].sendQueue : &planner->peers[peer].recvQueue,
+  //     p2p);
+  //   planner->nTasksP2p += 1;
 
-    // Mark channels that need pre-connect
-    if (comm->rank != peer) {
-      if (!(isSendNotRecv ? planner->peers[peer].sendSeen : planner->peers[peer].recvSeen)) {
-        (isSendNotRecv ? planner->peers[peer].sendSeen : planner->peers[peer].recvSeen) = true;
-        int round = 0;
-        while (peer != (isSendNotRecv ? comm->p2pSchedule[round].sendRank
-                                      : comm->p2pSchedule[round].recvRank)) {
-          round += 1;
-        }
-        uint8_t base = ncclP2pChannelBaseForRound(comm, round);
-        for (int c=0; c < comm->p2pnChannelsPerPeer; c++) {
-          int channelId = ncclP2pChannelForPart(comm->p2pnChannels, base, c);
-          if (isSendNotRecv) {
-            if (comm->channels[channelId].peers[peer]->send[1].connected == 0) { // P2P uses only 1 connector
-              comm->connectSend[peer] |= (1UL<<channelId);
-              ncclGroupCommPreconnect(comm);
-            }
-          } else {
-            if (comm->channels[channelId].peers[peer]->recv[1].connected == 0) { // P2P uses only 1 connector
-              comm->connectRecv[peer] |= (1UL<<channelId);
-              ncclGroupCommPreconnect(comm);
-            }
-          }
-        }
-      }
-    }
-  } else {
+  //   // Mark channels that need pre-connect
+  //   if (comm->rank != peer) {
+  //     if (!(isSendNotRecv ? planner->peers[peer].sendSeen : planner->peers[peer].recvSeen)) {
+  //       (isSendNotRecv ? planner->peers[peer].sendSeen : planner->peers[peer].recvSeen) = true;
+  //       int round = 0;
+  //       while (peer != (isSendNotRecv ? comm->p2pSchedule[round].sendRank
+  //                                     : comm->p2pSchedule[round].recvRank)) {
+  //         round += 1;
+  //       }
+  //       uint8_t base = ncclP2pChannelBaseForRound(comm, round);
+  //     }
+  //   }
+  // } else {
+  {
     // Empty collectives can be discarded.
     if (info->count == 0) return ncclSuccess;
 

@@ -346,7 +346,7 @@ struct ncclKernelPlanner {
   };
   struct ncclTaskCollSorter collSorter;
   struct Peer* peers/*[nRanks]*/;
-  int nTasksColl, nTasksP2p;
+  int nTasksColl;
   bool persistent;
 
   // The list of user streams aggregated over all tasks present.

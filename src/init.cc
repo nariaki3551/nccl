@@ -1107,8 +1107,8 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   }
   comm->topParentLocalRanks = topParentLocalRanks;
 
-  NCCLCHECKGOTO(ncclTransportCheckP2pType(comm, &comm->intraNodeP2pSupport, &comm->directMode), ret, fail);
-// ノード内に複数のランクがあり、かつP2P通信が可能な場合intraNodeP2pSupportをtrueにする
+  // NCCLCHECKGOTO(ncclTransportCheckP2pType(comm, &comm->intraNodeP2pSupport, &comm->directMode), ret, fail);
+  // ノード内に複数のランクがあり、かつP2P通信が可能な場合intraNodeP2pSupportをtrueにする
   comm->intraNodeP2pSupport = false;
   // Launch proxy service thread, after this, the proxy calls can be used.
   if (parent && parent->config.splitShare) {
@@ -1226,33 +1226,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
         NCCLCHECKGOTO(ncclProxyCallBlocking(comm, &proxyConn, ncclProxyMsgSharedInit, &comm->p2pnChannels, sizeof(int), NULL, 0), ret, fail);
       }
     }
-
-    if (ncclParamNvbPreconnect()) {
-      // Connect p2p when using NVB path
-      int nvbNpeers;
-      NCCLCHECKGOTO(ncclTopoGetNvbGpus(comm->topo, comm->rank, &nvbNpeers, &nvbPeers), ret, fail);
-      for (int r=0; r<nvbNpeers; r++) {
-        int peer = nvbPeers[r];
-        int sendRound=0, recvRound=0;
-        while (comm->p2pSchedule[sendRound].sendRank != peer) sendRound++;
-        while (comm->p2pSchedule[recvRound].recvRank != peer) recvRound++;
-        uint8_t sendBase = ncclP2pChannelBaseForRound(comm, sendRound);
-        uint8_t recvBase = ncclP2pChannelBaseForRound(comm, recvRound);
-        for (int c=0; c<comm->p2pnChannelsPerPeer; c++) {
-          int channelId;
-          channelId = ncclP2pChannelForPart(comm->p2pnChannels, sendBase, c);
-          if (comm->channels[channelId].peers[peer]->send[1].connected == 0) {
-            comm->connectSend[peer] |= (1UL<<channelId);
-          }
-          channelId = ncclP2pChannelForPart(comm->p2pnChannels, recvBase, c);
-          if (comm->channels[channelId].peers[peer]->recv[1].connected == 0) {
-            comm->connectRecv[peer] |= (1UL<<channelId);
-          }
-        }
-      }
-
-      NCCLCHECKGOTO(ncclTransportP2pSetup(comm, NULL, 1), ret, fail);
-    }
   }
 
   TRACE(NCCL_INIT, "rank %d nranks %d - CONNECTED %d RINGS AND TREES", rank, nranks, comm->nChannels);
@@ -1260,7 +1233,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   // Compute time models for algorithm and protocol combinations
   NCCLCHECKGOTO(ncclTopoTuneModel(comm, comm->minCompCap, comm->maxCompCap, graphs), ret, fail);
 
-  INFO(NCCL_INIT, "%d coll channels, %d collnet channels, %d nvls channels, %d p2p channels, %d p2p channels per peer", comm->nChannels, comm->nChannels, -1, comm->p2pnChannels, comm->p2pnChannelsPerPeer);
+  INFO(NCCL_INIT, "%d coll channels, %d collnet channels, %d nvls channels, %d p2p channels", comm->nChannels, comm->nChannels, -1, comm->p2pnChannels);
 
   if (comm->intraRank == 0) { // Load ncclParamLaunchMode
     const char* str = ncclGetEnv("NCCL_LAUNCH_MODE");
