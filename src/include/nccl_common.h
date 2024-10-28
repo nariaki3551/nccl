@@ -60,11 +60,11 @@ typedef enum {
 #define NCCL_ALGO_NVLS_TREE 5
 #define NCCL_ALGO_PAT 6
 
-#define NCCL_NUM_PROTOCOLS 3 // Simple/LL/LL128
+#define NCCL_NUM_PROTOCOLS 1 // Simple/LL/LL128
 #define NCCL_PROTO_UNDEF -1
-#define NCCL_PROTO_LL 0
-#define NCCL_PROTO_LL128 1
-#define NCCL_PROTO_SIMPLE 2
+#define NCCL_PROTO_SIMPLE 0
+#define NCCL_PROTO_LL 1
+#define NCCL_PROTO_LL128 2
 
 #define NCCL_ALGO_PROTO_IGNORE -1.0
 #endif

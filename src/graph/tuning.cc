@@ -53,29 +53,48 @@ ncclResult_t parseList(const char* str, const char* elems[], int nelems, int* li
 
 // Latencies in us, Bandwidths in GB/s
 // Tree { LL, LL128, Simple } , Ring { LL, LL128, Simple }
+// static const float baseLat  [NCCL_NUM_ALGORITHMS][NCCL_NUM_PROTOCOLS] = {
+//        {  6.8, 14.0,  8.4 }, {  6.6, 14.0,  8.4 },  // Tree, Ring
+//        {    0,    0,    0 }, {    0,    0,    0 },  // Collnet Direct, Chain
+//        {    0,    0,    0 }, {    0,    0,    0 }}; // NVLS, NVLS Tree
 static const float baseLat  [NCCL_NUM_ALGORITHMS][NCCL_NUM_PROTOCOLS] = {
-       {  6.8, 14.0,  8.4 }, {  6.6, 14.0,  8.4 },  // Tree, Ring
-       {    0,    0,    0 }, {    0,    0,    0 },  // Collnet Direct, Chain
-       {    0,    0,    0 }, {    0,    0,    0 }}; // NVLS, NVLS Tree
+       {8.4 }, {8.4 },  // Tree, Ring
+       {  0 }, {  0 },  // Collnet Direct, Chain
+       {  0 }, {  0 }}; // NVLS, NVLS Tree
+
 
 // NVLink, PCI, Network
 #define NCCL_HW_NVLINK 0
 #define NCCL_HW_PCI 1
 #define NCCL_HW_NET 2
 static float hwLat [3][NCCL_NUM_ALGORITHMS][NCCL_NUM_PROTOCOLS] =
+// { /* NVLINK */
+//   { /* Tree (LL/LL128/Simple)*/ { .6, 1.25, 4.0 }, /* Ring (LL/LL128/Simple)*/ { .6, 1.9, 3.4 },
+//     /* CollNetDirect (Simple)*/ { 0, 0, 3.7 }, /* CollNetChain (Simple)*/ { 0, 0, 2.8 },
+//     /* NVLS */ { 0, 0, 25 }, /* NVLSTree */ { 0, 0, 25 } },
+//   /* PCI */
+//   { /* Tree (LL/LL128/Simple)*/ { 1.0, 1.9, 4.0 }, /* Ring (LL/LL128/Simple)*/ { 1.0, 2.5, 5.7 },
+//     /* CollNetDirect (Simple)*/ { 0, 0, 3.7 }, /* CollNetChain (Simple)*/ { 0, 0, 2.8 },
+//     /* NVLS */ { 0, 0, 0 }, /* NVLSTree */ { 0, 0, 0 } },
+//   /* NET */
+//   { /* Tree (LL/LL128/Simple)*/ { 5.0, 8.5, 14 }, /* Ring (LL/LL128/Simple)*/ { 2.7, 4.0, 14.0 },
+//     /* CollNetDirect (Simple)*/ { 0, 0, 31 }, /* CollNetChain (Simple)*/ { 0, 0, 30 },
+//     /* NVLS */ { 0, 0, 18 }, /* NVLSTree */ { 0, 0, 14 } }
+// };
 { /* NVLINK */
-  { /* Tree (LL/LL128/Simple)*/ { .6, 1.25, 4.0 }, /* Ring (LL/LL128/Simple)*/ { .6, 1.9, 3.4 },
-    /* CollNetDirect (Simple)*/ { 0, 0, 3.7 }, /* CollNetChain (Simple)*/ { 0, 0, 2.8 },
-    /* NVLS */ { 0, 0, 25 }, /* NVLSTree */ { 0, 0, 25 } },
+  { /* Tree (LL/LL128/Simple)*/ {4.0 }, /* Ring (LL/LL128/Simple)*/ {3.4 },
+    /* CollNetDirect (Simple)*/ {3.7 }, /* CollNetChain (Simple)*/  {2.8 },
+    /* NVLS */                  {25 }, /* NVLSTree */               {25 } },
   /* PCI */
-  { /* Tree (LL/LL128/Simple)*/ { 1.0, 1.9, 4.0 }, /* Ring (LL/LL128/Simple)*/ { 1.0, 2.5, 5.7 },
-    /* CollNetDirect (Simple)*/ { 0, 0, 3.7 }, /* CollNetChain (Simple)*/ { 0, 0, 2.8 },
-    /* NVLS */ { 0, 0, 0 }, /* NVLSTree */ { 0, 0, 0 } },
+  { /* Tree (LL/LL128/Simple)*/ {4.0 }, /* Ring (LL/LL128/Simple)*/ {5.7 },
+    /* CollNetDirect (Simple)*/ {3.7 }, /* CollNetChain (Simple)*/  {2.8 },
+    /* NVLS */                  {0 }, /* NVLSTree */                {0 } },
   /* NET */
-  { /* Tree (LL/LL128/Simple)*/ { 5.0, 8.5, 14 }, /* Ring (LL/LL128/Simple)*/ { 2.7, 4.0, 14.0 },
-    /* CollNetDirect (Simple)*/ { 0, 0, 31 }, /* CollNetChain (Simple)*/ { 0, 0, 30 },
-    /* NVLS */ { 0, 0, 18 }, /* NVLSTree */ { 0, 0, 14 } }
+  { /* Tree (LL/LL128/Simple)*/ {14 }, /* Ring (LL/LL128/Simple)*/ {14.0 },
+    /* CollNetDirect (Simple)*/ {31 }, /* CollNetChain (Simple)*/  {30 },
+    /* NVLS */                  {18 }, /* NVLSTree */              {14 } }
 };
+
 
 /* Array indexes used below */
 #define VOLTA_COMPCAP_IDX 0
@@ -286,7 +305,8 @@ ncclResult_t ncclTopoTuneModel(struct ncclComm* comm, int minCompCap, int maxCom
 
   // Protocols/Algorithms enable/disable, and user overrides.
   // All are enabled except ll128 which is enabled by default only in certain cases.
-  int protoEnable[NCCL_NUM_PROTOCOLS] = { 1, 2, 1 };
+  // int protoEnable[NCCL_NUM_PROTOCOLS] = { 1, 2, 1 };
+  int protoEnable[NCCL_NUM_PROTOCOLS] = { 1 };
   int algoEnable[NCCL_NUM_ALGORITHMS] = { 1, 1, 1, 1, 1, 1, 1 };
 
   const char *protoStr = ncclGetEnv("NCCL_PROTO");
@@ -409,7 +429,8 @@ ncclResult_t ncclTopoTuneModel(struct ncclComm* comm, int minCompCap, int maxCom
   const char* str = ncclGetEnv("NCCL_THREAD_THRESHOLDS");
   if (str) {
     INFO(NCCL_ENV, "NCCL_THREAD_THRESHOLDS set by environment to %s", str);
-    ssize_t t[2][NCCL_NUM_PROTOCOLS] = {{ -2, -2, -2 }, { -2, -2, -2 }};
+    // ssize_t t[2][NCCL_NUM_PROTOCOLS] = {{ -2, -2, -2 }, { -2, -2, -2 }};
+    ssize_t t[2][NCCL_NUM_PROTOCOLS] = {{ -2 }, { -2 }};
     sscanf(str, "%ld %ld %ld %ld %ld %ld", t[0], t[0]+1, t[0]+2, t[1], t[1]+1, t[1]+2);
     for (int a=0; a<2; a++) {
       for (int p=0; p<NCCL_NUM_PROTOCOLS; p++) {
@@ -433,8 +454,8 @@ ncclResult_t ncclTopoTuneModel(struct ncclComm* comm, int minCompCap, int maxCom
 // Trees are not perfectly sticking to the model for medium sizes. Applying a static correction
 // factor is not ideal but works quite well. Powers of two, 64 B to 256MB.
 static float treeCorrectionFactor[NCCL_NUM_PROTOCOLS][23] = {
-  { 1.0, 1.0, 1.0, 1.0,  .9,  .8,  .7,  .7,  .7,  .7,  .6,  .5,  .4,  .4,  .5,  .6,  .7,  .8,  .9, 1.0, 1.0, 1.0, 1.0 },
-  { 1.0, 1.0, 1.0, 1.0, 1.0,  .9,  .8,  .8,  .8,  .7,  .6,  .6,  .6,  .6,  .6,  .6,  .8,  .9,  .9,  .9,  .9, 1.0, 1.0 },
+  // { 1.0, 1.0, 1.0, 1.0,  .9,  .8,  .7,  .7,  .7,  .7,  .6,  .5,  .4,  .4,  .5,  .6,  .7,  .8,  .9, 1.0, 1.0, 1.0, 1.0 },
+  // { 1.0, 1.0, 1.0, 1.0, 1.0,  .9,  .8,  .8,  .8,  .7,  .6,  .6,  .6,  .6,  .6,  .6,  .8,  .9,  .9,  .9,  .9, 1.0, 1.0 },
   {  .9,  .9,  .9,  .9,  .9,  .9,  .9,  .8,  .7,  .6,  .6,  .5,  .5,  .5,  .5,  .6,  .7,  .8,  .7,  .7,  .8,  .9,  .9 }
 };
 

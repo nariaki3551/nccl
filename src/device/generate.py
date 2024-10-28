@@ -7,7 +7,7 @@ import sys
 all_colls =  ["Broadcast","Reduce","AllGather","ReduceScatter","AllReduce","SendRecv"]
 all_redops = ["Sum","Prod","MinMax","PreMulSum","SumPostDiv"]
 all_tys =    ["i8","u8","i32","u32","i64","u64","f16","f32","f64","bf16"]
-all_protos = ["LL","LL128","SIMPLE"]
+all_protos = ["SIMPLE"]
 all_algos =  ["TREE","RING","COLLNET_DIRECT","COLLNET_CHAIN","NVLS","NVLS_TREE","PAT"]
 
 ################################################################################
@@ -141,8 +141,9 @@ def best_kernel(coll, redop, ty, algo, proto):
     # Modify this logic to control how many kernels are specialized.
     if coll=="Nop": return ("Generic", None, None, None, None)
     if coll=="SendRecv": return ("SendRecv", None, None, None, None)
-    if coll in ("AllGather","Broadcast"): return (coll, None, None, "RING", "LL")
-    return (coll, "Sum", ty, ("TREE" if algo=="TREE" else "RING"), "LL")
+    # if coll in ("AllGather","Broadcast"): return (coll, None, None, "RING", "LL")
+    if coll in ("AllGather","Broadcast"): return (coll, None, None, "RING", "SIMPLE")
+    return (coll, "Sum", ty, ("TREE" if algo=="TREE" else "RING"), "SIMPLE")
   # Need to ensure kernel is specialize for a primary function
   kfn = equivalent_primary(*best(coll, redop, ty, algo, proto))
   # And isn't filtered out.
