@@ -70,33 +70,6 @@ NCCL_PARAM(ConnectRoundMaxPeers, "CONNECT_ROUND_MAX_PEERS", 128);
 NCCL_PARAM(ReportConnectProgress, "REPORT_CONNECT_PROGRESS", 0);
 #include <sys/time.h>
 
-ncclResult_t ncclTransportCheckP2pType(struct ncclComm* comm, bool* intraNodeP2pSupport, bool* directMode) {
-  bool supportFlag = true;
-  bool directFlag = false;
-  if (comm->localRanks == 1) {
-    supportFlag = false;
-  } else {
-    for (int i = 0; i < comm->localRanks; ++i) {
-      for (int j = i + 1; j < comm->localRanks; ++j) {
-        int ipeer = comm->localRankToRank[i];
-        int jpeer = comm->localRankToRank[j];
-        struct ncclPeerInfo* ipeerInfo = &comm->peerInfo[ipeer];
-        struct ncclPeerInfo* jpeerInfo = &comm->peerInfo[jpeer];
-        int canConnect = 0;
-        NCCLCHECK(ncclTransports[0]->canConnect(&canConnect, comm, NULL, ipeerInfo, jpeerInfo));
-        if (!canConnect && supportFlag == true) {
-          supportFlag = false;
-        }
-        if (ipeerInfo->hostHash == jpeerInfo->hostHash && ipeerInfo->pidHash == jpeerInfo->pidHash) directFlag = true;
-        if (!supportFlag && directFlag) break;
-      }
-    }
-  }
-  *intraNodeP2pSupport = supportFlag;
-  *directMode = directFlag;
-  return ncclSuccess;
-}
-
 ncclResult_t ncclTransportP2pSetup(struct ncclComm* comm, struct ncclTopoGraph* graph, int connIndex, int* highestTransportType/*=NULL*/) {
   // Stream used during transport setup; need for P2P pre-connect + CUDA Graph
   ncclResult_t ret = ncclSuccess;
