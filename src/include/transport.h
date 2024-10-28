@@ -129,7 +129,6 @@ ncclResult_t ncclTransportCheckP2pType(struct ncclComm* comm, bool* intraNodeP2p
 
 enum { collNetRecv=0, collNetSend=1 };
 bool ncclTransportCollNetSetup(struct ncclComm* comm, struct ncclTopoGraph* collNetGraph, struct ncclChannel* channel, int masterRank, int masterPeer, int collNetGraphChannelId, int type, ncclConnect* connect);
-ncclResult_t ncclTransportCollNetCheck(struct ncclComm* comm, int collNetSetupFail);
 ncclResult_t ncclTransportCollNetFree(struct ncclComm* comm);
 ncclResult_t ncclCollnetLocalRegisterBuffer(struct ncclComm* comm, const void* userbuff, size_t buffSize, int type, int* outRegBufUsed, void** outHandle);
 ncclResult_t ncclCollnetGraphRegisterBuffer(struct ncclComm* comm, const void* userbuff, size_t buffSize, int type, int* outRegBufFlag, void** outHandle, struct ncclIntruQueue<struct ncclCommCallback, &ncclCommCallback::next>* cleanupQueue, int* nCleanupQueueElts);

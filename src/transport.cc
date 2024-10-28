@@ -369,24 +369,6 @@ cleanup:
   return ret != ncclSuccess;
 }
 
-ncclResult_t ncclTransportCollNetCheck(struct ncclComm* comm, int collNetSetupFail) {
-  // AllGather collNet setup results
-  int allGatherFailures[NCCL_MAX_LOCAL_RANKS] = {0};
-  allGatherFailures[comm->localRank] = collNetSetupFail;
-  NCCLCHECK(bootstrapIntraNodeAllGather(comm->bootstrap, comm->localRankToRank, comm->localRank, comm->localRanks, allGatherFailures, sizeof(int)));
-  for (int i=0; i<comm->localRanks; i++) {
-    if (allGatherFailures[i] != 0) {
-      collNetSetupFail = 1;
-      break;
-    }
-  }
-  if (collNetSetupFail) {
-    if (comm->localRank == 0) WARN("Cannot initialize CollNet, using point-to-point network instead");
-    return ncclSystemError;
-  }
-  return ncclSuccess;
-}
-
 ncclResult_t ncclTransportCollNetFree(struct ncclComm* comm) {
   // Free collNet resources
   for (int r=0; r<comm->nChannels; r++) {

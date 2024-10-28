@@ -1353,10 +1353,10 @@ ncclResult_t ncclCollNetSetup(ncclComm_t comm, ncclComm_t parent, struct ncclTop
         collNetSetupFail |= ncclTransportCollNetSetup(comm, directGraph, channel, head, head, h, collNetRecv, &connect);
         if (!collNetSetupFail) collNetSetupFail |= ncclTransportCollNetSetup(comm, directGraph, channel, head, head, h, collNetSend, &connect);
       }
-      // Verify CollNet setup across ranks after trying the first channel
-      if (c == 0) {
-        NCCLCHECKGOTO(ncclTransportCollNetCheck(comm, collNetSetupFail), ret, fail);
-      }
+      // // Verify CollNet setup across ranks after trying the first channel
+      // if (c == 0) {
+      //   NCCLCHECKGOTO(ncclTransportCollNetCheck(comm, collNetSetupFail), ret, fail);
+      // }
     }
     share = false;
   }
@@ -1398,9 +1398,9 @@ ncclResult_t ncclCollNetSetup(ncclComm_t comm, ncclComm_t parent, struct ncclTop
     } while (0);
   }
 
-  // Verify CollNet setup across ranks after trying all channels
-  NCCLCHECKGOTO(ncclTransportCollNetCheck(comm, collNetSetupFail), ret, fail);
-  TRACE(NCCL_INIT, "rank %d Connected inter-node CollNet", rank);
+  // // Verify CollNet setup across ranks after trying all channels
+  // NCCLCHECKGOTO(ncclTransportCollNetCheck(comm, collNetSetupFail), ret, fail);
+  // TRACE(NCCL_INIT, "rank %d Connected inter-node CollNet", rank);
 
 exit:
   free(infos);

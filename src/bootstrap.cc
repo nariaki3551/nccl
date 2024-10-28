@@ -827,65 +827,6 @@ ncclResult_t bootstrapIntraNodeBarrier(void* commState, int* ranks, int rank, in
   return ncclSuccess;
 }
 
-ncclResult_t bootstrapBarrier(void* commState, int rank, int nranks, int tag) {
-  uint64_t time = 0;
-  BOOTSTRAP_PROF_OPEN(time);
-  NCCLCHECK(bootstrapP2PBarrier(commState, NULL, rank, nranks, tag));
-  BOOTSTRAP_PROF_CLOSE(time);
-  TRACE(NCCL_BOOTSTRAP | NCCL_PROFILE, "bootstrapBarrier done in %f sec", time / 1e9);
-  return ncclSuccess;
-}
-
-ncclResult_t bootstrapIntraNodeAllGather(void* commState, int* ranks, int rank, int nranks, void* allData, int size) {
-  if (nranks == 1) return ncclSuccess;
-  TRACE(NCCL_INIT, "rank %d nranks %d size %d - ENTER", rank, nranks, size);
-
-  int prevRank = ranks[(rank - 1 + nranks) % nranks];
-  int nextRank = ranks[(rank + 1) % nranks];
-  // intraNode bootstrap is done defacto using the socket-based implementation
-  struct ncclSocket recvSocket, sendSocket;
-  NCCLCHECK(socketConnect(commState, nextRank, BOOTSTRAP_TAG_INTRANODE_ALLGATHER, &sendSocket));
-  NCCLCHECK(socketAccept(commState, prevRank, BOOTSTRAP_TAG_INTRANODE_ALLGATHER, &recvSocket));
-
-  NCCLCHECK(socketRingAllGather(&sendSocket, &recvSocket, rank, nranks, (char*)allData, size));
-
-  NCCLCHECK(ncclSocketClose(&sendSocket));
-  NCCLCHECK(ncclSocketClose(&recvSocket));
-
-  TRACE(NCCL_INIT, "rank %d nranks %d size %d - DONE", rank, nranks, size);
-  return ncclSuccess;
-}
-
-// [IntraNode] in-place Broadcast
-static ncclResult_t bootstrapP2PBroadcast(void* commState, int* ranks, int rank, int nranks, int root, void* bcastData, int size) {
-  if (nranks == 1) return ncclSuccess;
-  if (rank == root) {
-    for (int i = 0; i < nranks; i++) {
-      if (i != root) NCCLCHECK(bootstrapSend(commState, ranks ? ranks[i] : i, /*tag=*/ranks ? ranks[i] : i, bcastData, size));
-    }
-  } else {
-    NCCLCHECK(bootstrapRecv(commState, ranks ? ranks[root] : root, /*tag=*/ranks ? ranks[rank] : rank, bcastData, size));
-  }
-  return ncclSuccess;
-}
-
-ncclResult_t bootstrapIntraNodeBroadcast(void* commState, int* ranks, int rank, int nranks, int root, void* bcastData, int size) {
-  uint64_t time = 0;
-  BOOTSTRAP_PROF_OPEN(time);
-  NCCLCHECK(bootstrapP2PBroadcast(commState, ranks, rank, nranks, root, bcastData, size));
-  BOOTSTRAP_PROF_CLOSE(time);
-  TRACE(NCCL_BOOTSTRAP | NCCL_PROFILE, "bootstrapIntraNodeBroadcast for %d B done in %f sec: %f MB/sec", size, time / 1e9, (nranks * size / 1e6) / (time / 1e9));
-  return ncclSuccess;
-}
-ncclResult_t bootstrapBroadcast(void* commState, int rank, int nranks, int root, void* bcastData, int size) {
-  uint64_t time = 0;
-  BOOTSTRAP_PROF_OPEN(time);
-  NCCLCHECK(bootstrapP2PBroadcast(commState, NULL, rank, nranks, root, bcastData, size));
-  BOOTSTRAP_PROF_CLOSE(time);
-  TRACE(NCCL_BOOTSTRAP | NCCL_PROFILE, "bootstrapBroadcast done in %f sec", time / 1e9);
-  return ncclSuccess;
-}
-
 ncclResult_t bootstrapClose(void* commState) {
   if (commState == NULL)
     return ncclSuccess;

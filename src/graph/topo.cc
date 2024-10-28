@@ -827,9 +827,9 @@ ncclResult_t ncclTopoGetSystem(struct ncclComm* comm, struct ncclTopoSystem** sy
   rankXml = (struct ncclXml*)(mem+xmlMemSize(NCCL_TOPO_XML_MAX_NODES)*localRank);
   memcpy(rankXml, xml, xmlMemSize(NCCL_TOPO_XML_MAX_NODES));
   NCCLCHECKGOTO(ncclTopoConvertXml(rankXml, (uintptr_t)xml->nodes, 1), ret, fail);
-  // nLocalRanks can't actually be 0, or we wouldn't be running at all...
-  // coverity[divide_by_zero]
-  NCCLCHECKGOTO(bootstrapIntraNodeAllGather(comm->bootstrap, localRanks, localRank, nLocalRanks, mem, xmlMemSize(NCCL_TOPO_XML_MAX_NODES)), ret, fail);
+  // // nLocalRanks can't actually be 0, or we wouldn't be running at all...
+  // // coverity[divide_by_zero]
+  // NCCLCHECKGOTO(bootstrapIntraNodeAllGather(comm->bootstrap, localRanks, localRank, nLocalRanks, mem, xmlMemSize(NCCL_TOPO_XML_MAX_NODES)), ret, fail);
   if (comm->MNNVL) {
     // Ensure that we have enough room when fusing topos from multiple nodes.
     free(xml);

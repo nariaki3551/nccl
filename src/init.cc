@@ -1241,9 +1241,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   NCCLCHECKGOTO(devCommSetup(comm), ret, fail);
   timers[TIMER_INIT_CONNECT] = clockNano() -  timers[TIMER_INIT_CONNECT];
 
-  /* Local intra-node barrier */
-  NCCLCHECKGOTO(bootstrapIntraNodeBarrier(comm->bootstrap, comm->localRankToRank, comm->localRank, comm->localRanks, comm->localRankToRank[0]), ret, fail);
-
   // We should have allocated all buffers, collective fifos, ... we can
   // restore the affinity.
   TRACE(NCCL_INIT, "rank %d nranks %d - DONE", rank, nranks);

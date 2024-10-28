@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
 
     ncclGroupStart();
     ncclAllGather(sendbuff_ag, recvbuff_ag, count, nccl_dtype, comm, stream_ag);
-    // ncclReduceScatter(sendbuff_rs, recvbuff_rs, count, nccl_dtype, ncclSum, comm, stream_rs);
+    ncclReduceScatter(sendbuff_rs, recvbuff_rs, count, nccl_dtype, ncclSum, comm, stream_rs);
     ncclGroupEnd();
 
     cudaStreamSynchronize(stream_ag);
