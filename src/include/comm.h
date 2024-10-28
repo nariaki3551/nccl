@@ -546,7 +546,7 @@ struct ncclComm {
   // int nvlsSupport;
   // int nvlsRegSupport;
   /* sharable NVLS resource. */
-  struct ncclNvlsSharedRes* nvlsResources;
+  // struct ncclNvlsSharedRes* nvlsResources;
 
   // pools backed by comm->memPermanent
   struct ncclMemoryPool memPool_ncclTaskColl;
