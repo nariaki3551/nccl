@@ -63,49 +63,6 @@ ncclResult_t initChannel(struct ncclComm* comm, int channelId) {
   return ncclSuccess;
 }
 
-ncclResult_t initNvlsChannel(struct ncclComm* comm, int channelId, struct ncclComm* parent, bool share) {
-  struct ncclChannel* channel = &comm->channels[channelId];
-  struct ncclSharedResources* sharedRes = comm->sharedRes;
-
-  if (channel->nvlsPeers != NULL)
-    return ncclSuccess;
-
-  if (channel->id == -1)
-    NCCLCHECK(initChannel(comm, channelId));
-
-  NCCLCHECK(ncclStrongStreamAcquireUncaptured(&sharedRes->deviceStream));
-
-  int nvlsRanks = comm->localRanks;
-
-  if (share) {
-    channel->nvlsPeers = parent->channels[channelId].nvlsPeers;
-    channel->nvlsDevPeers = parent->channels[channelId].nvlsDevPeers;
-    for (int r = 0; r < nvlsRanks; ++r) {
-      int tr = comm->topParentLocalRanks[r];
-      uintptr_t addr = (uintptr_t)(parent->channels[channelId].nvlsDevPeers + tr);
-      channel->peers[comm->nRanks + 1 + r] = parent->channels[channelId].nvlsPeers + tr;
-      NCCLCHECK(ncclCudaMemcpyAsync((uintptr_t*)(channel->devPeers + comm->nRanks + 1 + r), (uintptr_t*)&addr, 1, sharedRes->deviceStream.cudaStream));
-      channel->devPeersHostPtr[comm->nRanks + 1 + r] = (struct ncclDevChannelPeer*)addr;
-      ncclAtomicRefCountIncrement(&parent->channels[channelId].nvlsPeers[tr].refCount);
-    }
-  } else {
-    NCCLCHECK(ncclCalloc(&channel->nvlsPeers, nvlsRanks));
-    NCCLCHECK(ncclCudaCallocAsync(&channel->nvlsDevPeers, nvlsRanks, sharedRes->deviceStream.cudaStream));
-    for (int r = 0; r < nvlsRanks; ++r) {
-      uintptr_t addr = (uintptr_t)(channel->nvlsDevPeers + r);
-      channel->peers[comm->nRanks + 1 + r] = channel->nvlsPeers + r;
-      NCCLCHECK(ncclCudaMemcpyAsync((uintptr_t*)(channel->devPeers + comm->nRanks + 1 + r), (uintptr_t*)&addr, 1, sharedRes->deviceStream.cudaStream));
-      channel->devPeersHostPtr[comm->nRanks + 1 + r] = (struct ncclDevChannelPeer*)addr;
-      ncclAtomicRefCountIncrement(&channel->nvlsPeers[r].refCount);
-    }
-  }
-
-  NCCLCHECK(ncclStrongStreamSynchronize(&sharedRes->deviceStream));
-  NCCLCHECK(ncclStrongStreamRelease(ncclCudaGraphNone(), &sharedRes->deviceStream));
-
-  return ncclSuccess;
-}
-
 ncclResult_t initCollnetChannel(struct ncclComm* comm, int channelId, struct ncclComm* parent, bool share) {
   struct ncclChannel* channel = &comm->channels[channelId];
   struct ncclSharedResources* sharedRes = comm->sharedRes;
