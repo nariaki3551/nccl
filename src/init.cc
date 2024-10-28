@@ -803,7 +803,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     for (int i = 0; i < nranks; i++) comm->minCompCap = std::min(comm->minCompCap, comm->peerInfo[i].cudaCompCap);
     for (int i = 0; i < nranks; i++) comm->maxCompCap = std::max(comm->maxCompCap, comm->peerInfo[i].cudaCompCap);
 
-    comm->nvlsRegSupport = 1;
     for (int i = 0; i < nranks; i++) {
       if ((comm->peerInfo[i].hostHash == comm->peerInfo[rank].hostHash)
           && (comm->peerInfo[i].pidHash == comm->peerInfo[rank].pidHash)) {
@@ -817,19 +816,10 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
         }
       }
 
-      // if (comm->nvlsRegSupport) {
-      //   for (int j = i + 1; j < nranks; j++) {
-      //     if (comm->peerInfo[i].hostHash == comm->peerInfo[j].hostHash &&
-      //       comm->peerInfo[i].pidHash == comm->peerInfo[j].pidHash) {
-      //       comm->nvlsRegSupport = 0;
-      //       break;
-      //     }
-      //   }
-      // }
     }
 
     // Buffer Registration is not supported with MNNVL
-    if (comm->MNNVL) comm->nvlsRegSupport = 0;
+    // if (comm->MNNVL) comm->nvlsRegSupport = 0;
 
     TRACE(NCCL_INIT,"pidHash[%d] %lx intraProcRank %d intraProcRanks %d intraProcRank0 %d",
         rank, comm->peerInfo[rank].pidHash, intraProcRank, intraProcRanks, intraProcRank0);
