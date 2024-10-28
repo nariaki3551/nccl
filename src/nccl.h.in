@@ -256,29 +256,6 @@ typedef enum {
 } ncclScalarResidence_t;
 
 /*
- * ncclRedOpCreatePreMulSum
- *
- * Creates a new reduction operator which pre-multiplies input values by a given
- * scalar locally before reducing them with peer values via summation. For use
- * only with collectives launched against *comm* and *datatype*. The
- * *residence* argument indicates how/when the memory pointed to by *scalar*
- * will be dereferenced. Upon return, the newly created operator's handle
- * is stored in *op*.
- */
-ncclResult_t  ncclRedOpCreatePreMulSum(ncclRedOp_t *op, void *scalar, ncclDataType_t datatype, ncclScalarResidence_t residence, ncclComm_t comm);
-ncclResult_t pncclRedOpCreatePreMulSum(ncclRedOp_t *op, void *scalar, ncclDataType_t datatype, ncclScalarResidence_t residence, ncclComm_t comm);
-
-/*
- * ncclRedOpDestroy
- *
- * Destroys the reduction operator *op*. The operator must have been created by
- * ncclRedOpCreatePreMul with the matching communicator *comm*. An operator may be
- * destroyed as soon as the last NCCL function which is given that operator returns.
- */
-ncclResult_t ncclRedOpDestroy(ncclRedOp_t op, ncclComm_t comm);
-ncclResult_t pncclRedOpDestroy(ncclRedOp_t op, ncclComm_t comm);
-
-/*
  * Collective communication operations
  *
  * Collective communication operations must be called separately for each

@@ -1951,12 +1951,6 @@ static ncclResult_t calcCollChunking(
   size_t grainSize = ncclProtoGrainSize(info->protocol);
 
   switch (info->func) {
-  case ncclFuncBroadcast:
-    pattern = info->algorithm == NCCL_ALGO_TREE ? ncclPatternTreeDown : ncclPatternPipelineFrom;
-    break;
-  case ncclFuncReduce:
-    pattern = info->algorithm == NCCL_ALGO_TREE ? ncclPatternTreeUp : ncclPatternPipelineTo;
-    break;
   case ncclFuncReduceScatter:
     pattern =
       info->algorithm == NCCL_ALGO_PAT ? ncclPatternPatUp :
@@ -1971,15 +1965,15 @@ static ncclResult_t calcCollChunking(
       info->algorithm == NCCL_ALGO_COLLNET_DIRECT ? ncclPatternCollnetDirect :
       ncclPatternRing;
     break;
-  case ncclFuncAllReduce:
-    pattern =
-      info->algorithm == NCCL_ALGO_NVLS ? ncclPatternNvls :
-      info->algorithm == NCCL_ALGO_NVLS_TREE ? ncclPatternNvlsTree :
-      info->algorithm == NCCL_ALGO_COLLNET_DIRECT ? ncclPatternCollnetDirect :
-      info->algorithm == NCCL_ALGO_COLLNET_CHAIN ? ncclPatternCollnetChain :
-      info->algorithm == NCCL_ALGO_TREE ? ncclPatternTreeUpDown :
-      ncclPatternRingTwice;
-    break;
+  // case ncclFuncAllReduce:
+  //   pattern =
+  //     info->algorithm == NCCL_ALGO_NVLS ? ncclPatternNvls :
+  //     info->algorithm == NCCL_ALGO_NVLS_TREE ? ncclPatternNvlsTree :
+  //     info->algorithm == NCCL_ALGO_COLLNET_DIRECT ? ncclPatternCollnetDirect :
+  //     info->algorithm == NCCL_ALGO_COLLNET_CHAIN ? ncclPatternCollnetChain :
+  //     info->algorithm == NCCL_ALGO_TREE ? ncclPatternTreeUpDown :
+  //     ncclPatternRingTwice;
+  //   break;
   default:
     WARN("Unknown pattern for collective %d algorithm %d", info->func, info->algorithm);
     return ncclInternalError;
@@ -1997,20 +1991,8 @@ static ncclResult_t calcCollChunking(
   case ncclPatternCollnetChain:
     nstepsPerLoop = nchunksPerLoop = 1;
     break;
-  case ncclPatternNvls:
-    nstepsPerLoop = 1; nchunksPerLoop = comm->channels[0].nvls.nHeads;
-    break;
   case ncclPatternCollnetDirect:
     nstepsPerLoop = 1; nchunksPerLoop = comm->channels[0].collnetDirect.nHeads;
-    break;
-  case ncclPatternRing:
-    nstepsPerLoop = comm->nRanks-1; nchunksPerLoop = comm->nRanks;
-    break;
-  case ncclPatternRingTwice:
-    nstepsPerLoop = 2*(comm->nRanks-1); nchunksPerLoop = comm->nRanks;
-    break;
-  case ncclPatternNvlsTree:
-    nstepsPerLoop = 1; nchunksPerLoop = comm->channels[0].nvls.nHeads;
     break;
   default:
     WARN("Unknown pattern %d", pattern);
@@ -2029,49 +2011,6 @@ static ncclResult_t calcCollChunking(
     while (nBytes / (nChannels * comm->channels[0].collnetDirect.nHeads * chunkSize) < comm->channels[0].collnetDirect.depth * 64 && chunkSize > 131072) chunkSize /= 2;
     while (nBytes / (nChannels * comm->channels[0].collnetDirect.nHeads * chunkSize) < comm->channels[0].collnetDirect.depth * 8 && chunkSize > 65536) chunkSize /= 2;
     while (nBytes / (nChannels * comm->channels[0].collnetDirect.nHeads * chunkSize) < comm->channels[0].collnetDirect.depth * 8 && chunkSize > 32768) chunkSize /= 2;
-  } else if (info->algorithm == NCCL_ALGO_COLLNET_CHAIN) {
-    stepSize = comm->buffSizes[NCCL_PROTO_SIMPLE] / NCCL_STEPS;
-    chunkSize = std::min(256 * 1024, stepSize * chunkSteps);
-    while (nBytes / (nChannels * chunkSize) < comm->channels[0].collnetChain.depth * 64 && chunkSize > 131072) chunkSize /= 2;
-    while (nBytes / (nChannels * chunkSize) < comm->channels[0].collnetChain.depth * 8 && chunkSize > 65536) chunkSize /= 2;
-    while (nBytes / (nChannels * chunkSize) < comm->channels[0].collnetChain.depth && chunkSize > 32768) chunkSize /= 2;
-  } else if (info->algorithm == NCCL_ALGO_NVLS) {
-    int maxChunkSize = comm->nvlsChunkSize;
-    if (comm->nNodes > 1 && comm->bandwidths[ncclFuncAllReduce][NCCL_ALGO_NVLS][NCCL_PROTO_SIMPLE] < 150) maxChunkSize = 32768;
-    if (chunkSize > maxChunkSize) chunkSize = maxChunkSize;
-    // Use uint64_t so that concurrentOps*chunkSize*X does not overflow.
-    // However, nChannels * comm->channels[0].nvls.nHeads should easily fit in 32 bits.
-    // coverity[overflow_before_widen]
-    uint64_t concurrentOps = nChannels * comm->channels[0].nvls.nHeads;
-    if ((nBytes < (64 * (concurrentOps * chunkSize))) && (chunkSize > 65536)) chunkSize = 65536;
-    if ((nBytes < (8 * (concurrentOps * chunkSize))) && (chunkSize > 32768)) chunkSize = 32768;
-    if ((nBytes < (2 * (concurrentOps * chunkSize))) && (chunkSize > 16384)) chunkSize = 16384;
-  } else if (info->algorithm == NCCL_ALGO_NVLS_TREE) {
-    // Use uint64_t so that concurrentOps*chunkSize*X does not overflow.
-    // However, nChannels * comm->channels[0].nvls.nHeads should easily fit in 32 bits.
-    // coverity[overflow_before_widen]
-    uint64_t concurrentOps = nChannels * comm->channels[0].nvls.nHeads;
-    chunkSize = comm->nvlsChunkSize;
-    int maxChunkSize = (int)ncclParamNvlsTreeMaxChunkSize();
-    if (maxChunkSize == -2) maxChunkSize = comm->nNodes >= 4 ? 65536 : chunkSize;
-    chunkSize = std::min(chunkSize, maxChunkSize);
-    if ((nBytes < (32 * (concurrentOps * chunkSize))) && (chunkSize > 262144)) chunkSize = 262144;
-    if ((nBytes < (16 * (concurrentOps * chunkSize))) && (chunkSize > 131072)) chunkSize = 131072;
-    if ((nBytes < (4 * (concurrentOps * chunkSize))) && (chunkSize > 65536)) chunkSize = 65536;
-    if ((nBytes < (1 * (concurrentOps * chunkSize))) && (chunkSize > 32768)) chunkSize = 32768;
-  } else if (info->algorithm == NCCL_ALGO_TREE && info->protocol == NCCL_PROTO_LL128) {
-    int nNodes = comm->nNodes;
-    float ppn = comm->nRanks / (float)nNodes;
-    float nstepsLL128 = 1+log2i(nNodes) + 0.1*ppn;
-    // Yes, we are OK with the division on the left side of the < operand being integer.
-    // coverity[integer_division]
-    while (nBytes / (nChannels*chunkSize) < nstepsLL128*64/ppn && chunkSize > 131072) chunkSize /= 2;
-    // coverity[integer_division]
-    while (nBytes / (nChannels*chunkSize) < nstepsLL128*16/ppn && chunkSize > 32768) chunkSize /= 2;
-  } else if (info->func == ncclFuncAllGather && info->algorithm == NCCL_ALGO_PAT) {
-    while (chunkSize*nChannels*32 > nBytes && chunkSize > 65536) chunkSize /= 2;
-  } else if (info->func == ncclFuncReduceScatter && info->algorithm == NCCL_ALGO_PAT) {
-    while (chunkSize*nChannels*16 > nBytes && chunkSize > 65536) chunkSize /= 2;
   }
 
   // Compute directFlags of work struct.
@@ -2351,77 +2290,4 @@ exit:
 fail:
   if (info->comm && !info->comm->config.blocking) (void) ncclCommSetAsyncError(info->comm, ret);
   goto exit;
-}
-
-NCCL_API(ncclResult_t, ncclRedOpCreatePreMulSum, ncclRedOp_t *op, void *scalar, ncclDataType_t datatype, ncclScalarResidence_t residence, ncclComm_t comm);
-ncclResult_t ncclRedOpCreatePreMulSum(ncclRedOp_t *op, void *scalar, ncclDataType_t datatype, ncclScalarResidence_t residence, ncclComm_t comm) {
-  NCCLCHECK(CommCheck(comm, "ncclRedOpCreatePreMulSum", "comm"));
-  /* join init thread before creating PreMulSum op. */
-  NCCLCHECK(ncclCommEnsureReady(comm));
-
-  if (comm->userRedOpFreeHead == comm->userRedOpCapacity) {
-    // double capacity and resize
-    int cap = 2*comm->userRedOpCapacity;
-    if (cap < 4) cap = 4;
-    ncclUserRedOp *ops = new ncclUserRedOp[cap];
-    if (comm->userRedOpCapacity > 0)
-      std::memcpy(ops, comm->userRedOps, comm->userRedOpCapacity*sizeof(ncclUserRedOp));
-    for(int ix=comm->userRedOpCapacity; ix < cap; ix++)
-      ops[ix].freeNext = ix + 1;
-    delete[] comm->userRedOps;
-    comm->userRedOps = ops;
-    comm->userRedOpCapacity = cap;
-  }
-  // pop from free list
-  int ix = comm->userRedOpFreeHead;
-  ncclUserRedOp *user = &comm->userRedOps[ix];
-  comm->userRedOpFreeHead = user->freeNext;
-
-  user->freeNext = -1; // allocated
-  user->datatype = datatype;
-  user->opFull.op = ncclDevPreMulSum;
-  if (residence == ncclScalarHostImmediate) {
-    int size = ncclTypeSize(datatype);
-    if (size < 1) return ncclInternalError;
-    user->opFull.scalarArgIsPtr = false;
-    std::memcpy(&user->opFull.scalarArg, scalar, size);
-  } else {
-    user->opFull.scalarArgIsPtr = true;
-    user->opFull.scalarArg = reinterpret_cast<uint64_t>(scalar);
-  }
-  *op = ncclRedOp_t(int(ncclNumOps) + ix);
-  *op = ncclUserRedOpMangle(comm, *op);
-  TRACE_CALL("ncclRedOpCreatePreMulSum(%d,%p,%d,%d,%p)", *op, scalar, datatype, residence, comm);
-  return ncclSuccess;
-}
-
-NCCL_API(ncclResult_t, ncclRedOpDestroy, ncclRedOp_t op, ncclComm_t comm);
-ncclResult_t ncclRedOpDestroy(ncclRedOp_t op, ncclComm_t comm) {
-  if (0 <= int(op) && int(op) < int(ncclNumOps)) {
-    WARN("ncclRedOpDestroy : operator is a NCCL builtin.");
-    return ncclInvalidArgument;
-  }
-  // int(ncclMaxRedOp) < int(op) will always be false due to the sizes of
-  // the datatypes involved, and that's by design.  We keep the check though
-  // just as a reminder.
-  // coverity[result_independent_of_operands]
-  if (int(op) < 0 || int(ncclMaxRedOp) < int(op)) {
-    WARN("ncclRedOpDestroy :  operator is garbage.");
-    return ncclInvalidArgument;
-  }
-  if (comm == NULL) {
-    WARN("ncclRedOpDestroy : invalid communicator passed.");
-    return ncclInvalidArgument;
-  }
-
-  int ix = int(ncclUserRedOpMangle(comm, op)) - int(ncclNumOps);
-  if (comm->userRedOpCapacity <= ix || comm->userRedOps[ix].freeNext != -1) {
-    WARN("ncclRedOpDestroy : operator unknown to this communicator.");
-    return ncclInvalidArgument;
-  }
-  // push to free list
-  comm->userRedOps[ix].freeNext = comm->userRedOpFreeHead;
-  comm->userRedOpFreeHead = ix;
-  TRACE_CALL("ncclRedOpDestroy(%d,%p)", op, comm);
-  return ncclSuccess;
 }
