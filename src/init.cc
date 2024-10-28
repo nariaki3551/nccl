@@ -1108,6 +1108,8 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   comm->topParentLocalRanks = topParentLocalRanks;
 
   NCCLCHECKGOTO(ncclTransportCheckP2pType(comm, &comm->intraNodeP2pSupport, &comm->directMode), ret, fail);
+// ノード内に複数のランクがあり、かつP2P通信が可能な場合intraNodeP2pSupportをtrueにする
+  comm->intraNodeP2pSupport = false;
   // Launch proxy service thread, after this, the proxy calls can be used.
   if (parent && parent->config.splitShare) {
     comm->proxyState = parent->sharedRes->proxyState;
