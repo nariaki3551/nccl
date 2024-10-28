@@ -12,7 +12,6 @@
 #include "transport.h"
 
 struct ncclTransport* ncclTransports[NTRANSPORTS] = {
-  &netTransport,
   &collNetTransport
 };
 

@@ -14,9 +14,6 @@
 #include "bootstrap.h"
 #include "channel.h"
 
-int64_t ncclParamGdrCopySyncEnable();
-int64_t ncclParamGdrCopyFlushEnable();
-
 struct collNetRecvConnectInfo {
   collNetHandle_t collNetHandle;
 };
@@ -470,16 +467,6 @@ static ncclResult_t sendProxyConnect(struct ncclProxyConnection* connection, str
 
   NCCLCHECK(ncclCudaHostCalloc(&map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr, map->mems[NCCL_NET_MAP_HOSTMEM].size));
   map->mems[NCCL_NET_MAP_HOSTMEM].gpuPtr = map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr;
-  if (ncclGdrCopy && ncclParamGdrCopySyncEnable()) {
-    uint64_t *cpuPtr, *gpuPtr;
-    NCCLCHECK(ncclGdrCudaCalloc(&cpuPtr, &gpuPtr, 1, &resources->gdrDesc));
-
-    resources->gdcSync = cpuPtr;
-    struct connectMapMem* gdcMem = map->mems+NCCL_NET_MAP_GDCMEM;
-    gdcMem->cpuPtr = (char*)cpuPtr;
-    gdcMem->gpuPtr = (char*)gpuPtr;
-    gdcMem->size = sizeof(uint64_t); // sendMem->head
-  }
 
   resources->sendMem = (struct ncclSendMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, sendMem);
   resources->recvMem = (struct ncclRecvMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, recvMem);
@@ -538,19 +525,6 @@ static ncclResult_t recvProxyConnect(struct ncclProxyConnection* connection, str
 
   NCCLCHECK(ncclCudaHostCalloc(&map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr, map->mems[NCCL_NET_MAP_HOSTMEM].size));
   map->mems[NCCL_NET_MAP_HOSTMEM].gpuPtr = map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr;
-  if (ncclGdrCopy) {
-    uint64_t *cpuPtr, *gpuPtr;
-    NCCLCHECK(ncclGdrCudaCalloc(&cpuPtr, &gpuPtr, 2, &resources->gdrDesc));
-
-    if (ncclParamGdrCopySyncEnable()) {
-      resources->gdcSync = cpuPtr;
-      struct connectMapMem* gdcMem = map->mems+NCCL_NET_MAP_GDCMEM;
-      gdcMem->cpuPtr = (char*)cpuPtr;
-      gdcMem->gpuPtr = (char*)gpuPtr;
-      gdcMem->size = sizeof(uint64_t);
-    }
-    if (ncclParamGdrCopyFlushEnable()) resources->gdcFlush = cpuPtr + 1;
-  }
 
   resources->sendMem = (struct ncclSendMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, sendMem);
   resources->recvMem = (struct ncclRecvMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, recvMem);

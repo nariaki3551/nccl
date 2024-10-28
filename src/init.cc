@@ -748,7 +748,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   int *nodesFirstRank = NULL, *nodesTreePatterns = NULL;
   int *rings = NULL;
   int* nvbPeers = NULL;
-  struct ncclProxyConnector proxyConn;
   int* pxnPeers = NULL;
   int *topParentLocalRanks = NULL;
 
@@ -1169,47 +1168,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     // NCCLCHECKGOTO(ncclNvlsSetup(comm, parent), ret, fail);
     // Check if we can setup CollNet
     if (comm->collNetSupport > 0) ncclCollNetSetup(comm, parent, graphs);
-  } else {
-    for (int c=0; c<comm->nChannels; c++) {
-      NCCLCHECKGOTO(setupChannel(comm, c, rank, nranks, rings+c*nranks), ret, fail);
-    }
-    NCCLCHECKGOTO(ncclTransportRingConnect(comm), ret, fail);
-
-    // Connect Trees
-    NCCLCHECKGOTO(ncclTransportTreeConnect(comm), ret, fail);
-
-    // Connect PAT only for communicators with 1 GPU per node
-    if (comm->maxLocalRanks == 1) NCCLCHECKGOTO(ncclTransportPatConnect(comm), ret, fail);
-
-    // Setup NVLS
-    // NCCLCHECKGOTO(ncclNvlsSetup(comm, parent), ret, fail);
-    // NCCLCHECKGOTO(ncclNvlsBufferSetup(comm), ret, fail);
-
-    // And NVLS trees if needed
-    // NCCLCHECKGOTO(ncclNvlsTreeConnect(comm), ret, fail);
-
-    // Check if we can setup CollNet
-    if (comm->collNetSupport > 0) {
-      ncclCollNetSetup(comm, parent, graphs);
-      NCCLCHECKGOTO(ncclCollNetChainBufferSetup(comm), ret, fail);
-      if (comm->maxLocalRanks <= NCCL_MAX_DIRECT_ARITY+1) {
-        NCCLCHECKGOTO(ncclCollNetDirectBufferSetup(comm), ret, fail);
-      }
-    }
-
-    // Connect to local net proxy
-    NCCLCHECKGOTO(ncclProxyConnect(comm, TRANSPORT_NET, 1, comm->rank, &proxyConn), ret, fail);
-    NCCLCHECKGOTO(ncclProxyCallBlocking(comm, &proxyConn, ncclProxyMsgSharedInit, &comm->p2pnChannels, sizeof(int), NULL, 0), ret, fail);
-
-    // Then to remote ones when using PXN
-    if (ncclPxnDisable(comm) == 0) {
-      int nranks;
-      NCCLCHECKGOTO(ncclTopoGetPxnRanks(comm, &pxnPeers, &nranks), ret, fail);
-      for (int r=0; r<nranks; r++) {
-        NCCLCHECKGOTO(ncclProxyConnect(comm, TRANSPORT_NET, 1, pxnPeers[r], &proxyConn), ret, fail);
-        NCCLCHECKGOTO(ncclProxyCallBlocking(comm, &proxyConn, ncclProxyMsgSharedInit, &comm->p2pnChannels, sizeof(int), NULL, 0), ret, fail);
-      }
-    }
   }
 
   TRACE(NCCL_INIT, "rank %d nranks %d - CONNECTED %d RINGS AND TREES", rank, nranks, comm->nChannels);
