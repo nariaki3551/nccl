@@ -573,20 +573,20 @@ ncclResult_t ncclTopoComputePaths(struct ncclTopoSystem* system, struct ncclComm
 
     if (comm == NULL) continue;
     // Remove GPUs we can't (or don't want to) communicate with through P2P or SHM
-    struct ncclPeerInfo* dstInfo = comm->peerInfo+system->nodes[GPU].nodes[g].gpu.rank;
+    // struct ncclPeerInfo* dstInfo = comm->peerInfo+system->nodes[GPU].nodes[g].gpu.rank;
     for (int p=0; p<system->nodes[GPU].count; p++) {
       if (p == g) continue;
-      struct ncclPeerInfo* srcInfo = comm->peerInfo+system->nodes[GPU].nodes[p].gpu.rank;
-      int p2p;
-      NCCLCHECK(ncclTransports[TRANSPORT_P2P]->canConnect(&p2p, comm, NULL, srcInfo, dstInfo));
-      if (p2p == 0) {
-        // int shm;
-        // NCCLCHECK(ncclTransports[TRANSPORT_SHM]->canConnect(&shm, comm, NULL, srcInfo, dstInfo));
-        // if (shm == 0) {
-        //   // Mark this peer as inaccessible. We'll trim it later.
-        //   system->nodes[GPU].nodes[p].paths[GPU][g].type = PATH_NET;
-        // }
-      }
+      // struct ncclPeerInfo* srcInfo = comm->peerInfo+system->nodes[GPU].nodes[p].gpu.rank;
+      // int p2p;
+      // NCCLCHECK(ncclTransports[TRANSPORT_P2P]->canConnect(&p2p, comm, NULL, srcInfo, dstInfo));
+      // if (p2p == 0) {
+      //   //int shm;
+      //   //NCCLCHECK(ncclTransports[TRANSPORT_SHM]->canConnect(&shm, comm, NULL, srcInfo, dstInfo));
+      //   //if (shm == 0) {
+      //   //  // Mark this peer as inaccessible. We'll trim it later.
+      //   //  system->nodes[GPU].nodes[p].paths[GPU][g].type = PATH_NET;
+      //   //}
+      // }
     }
   }
 

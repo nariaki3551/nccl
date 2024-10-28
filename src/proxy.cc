@@ -1154,9 +1154,9 @@ ncclResult_t ncclProxyClientGetFdBlocking(struct ncclComm* comm, int proxyRank, 
   ncclResult_t ret = ncclSuccess;
 
   // Request the allocation of a UDS fd for the handle
-  if (comm->gproxyConn[proxyRank].initialized == false) {
-    NCCLCHECKGOTO(ncclProxyConnect(comm, TRANSPORT_P2P, 1, proxyRank, &comm->gproxyConn[proxyRank]), ret, error);
-  }
+  // if (comm->gproxyConn[proxyRank].initialized == false) {
+  //   NCCLCHECKGOTO(ncclProxyConnect(comm, TRANSPORT_P2P, 1, proxyRank, &comm->gproxyConn[proxyRank]), ret, error);
+  // }
   NCCLCHECKGOTO(ncclProxyCallBlockingUDS(comm, &comm->gproxyConn[proxyRank], ncclProxyMsgGetFd, handle, sizeof(CUmemGenericAllocationHandle), NULL, 0, NULL, convertedFd), ret, error);
 
   // We have now received the converted fd over UDS

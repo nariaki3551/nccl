@@ -195,7 +195,6 @@ struct ncclProxySharedP2p {
   char* cudaBuff;
   char* hostBuff;
   // CUDA IPC
-  ncclIpcDesc ipcDesc;
   struct ncclProxyArgs* proxyAppend[MAXCHANNELS]; // Separate send and recv
 };
 

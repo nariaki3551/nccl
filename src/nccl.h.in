@@ -203,10 +203,6 @@ ncclResult_t pncclCommUserRank(const ncclComm_t comm, int* rank);
 ncclResult_t  ncclCommRegister(const ncclComm_t comm, void* buff, size_t size, void** handle);
 ncclResult_t pncclCommRegister(const ncclComm_t comm, void* buff, size_t size, void** handle);
 
-/* Deregister CUDA buffer */
-ncclResult_t  ncclCommDeregister(const ncclComm_t comm, void* handle);
-ncclResult_t pncclCommDeregister(const ncclComm_t comm, void* handle);
-
 /* Reduction operation selector */
 typedef enum { ncclNumOps_dummy = 5 } ncclRedOp_dummy_t;
 typedef enum { ncclSum        = 0,

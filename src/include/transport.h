@@ -12,16 +12,14 @@
 #include "nvmlwrap.h"
 #include "core.h"
 
-#define NTRANSPORTS 3
+#define NTRANSPORTS 2
 #define TRANSPORT_UNDEFINED -1
-#define TRANSPORT_P2P 0
-#define TRANSPORT_NET 1
-#define TRANSPORT_COLLNET 2
+#define TRANSPORT_NET 0
+#define TRANSPORT_COLLNET 1
 
 #include "proxy.h"
 #include "comm.h"
 
-extern struct ncclTransport p2pTransport;
 extern struct ncclTransport netTransport;
 extern struct ncclTransport collNetTransport;
 
