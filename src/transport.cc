@@ -13,7 +13,6 @@
 
 struct ncclTransport* ncclTransports[NTRANSPORTS] = {
   &p2pTransport,
-  &shmTransport,
   &netTransport,
   &collNetTransport
 };

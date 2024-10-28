@@ -580,12 +580,12 @@ ncclResult_t ncclTopoComputePaths(struct ncclTopoSystem* system, struct ncclComm
       int p2p;
       NCCLCHECK(ncclTransports[TRANSPORT_P2P]->canConnect(&p2p, comm, NULL, srcInfo, dstInfo));
       if (p2p == 0) {
-        int shm;
-        NCCLCHECK(ncclTransports[TRANSPORT_SHM]->canConnect(&shm, comm, NULL, srcInfo, dstInfo));
-        if (shm == 0) {
-          // Mark this peer as inaccessible. We'll trim it later.
-          system->nodes[GPU].nodes[p].paths[GPU][g].type = PATH_NET;
-        }
+        // int shm;
+        // NCCLCHECK(ncclTransports[TRANSPORT_SHM]->canConnect(&shm, comm, NULL, srcInfo, dstInfo));
+        // if (shm == 0) {
+        //   // Mark this peer as inaccessible. We'll trim it later.
+        //   system->nodes[GPU].nodes[p].paths[GPU][g].type = PATH_NET;
+        // }
       }
     }
   }
