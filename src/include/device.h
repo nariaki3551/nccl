@@ -514,8 +514,6 @@ extern int const ncclDevFuncRowToId[];
 extern void* const ncclDevKernelForFunc[/*funcIndex*/];
 extern bool const ncclDevKernelForFuncIsSpecialized[/*funcIndex*/];
 
-// Launch a one-rank reduction on stream.
-ncclResult_t ncclLaunchOneRank(void* dst, void const* src, size_t nElts, struct ncclDevRedOpFull redOp, ncclDataType_t type, cudaStream_t stream);
 
 // `ncclDevFuncIndex()` needs to be in sync with "all_functions()" in "src/device/generate.py"
 inline int ncclDevFuncId(int coll, int devRedOp, int type, int algo, int proto) {

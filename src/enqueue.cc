@@ -2260,10 +2260,11 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo* info) {
     struct ncclDevRedOpFull opDev;
     NCCLCHECK(hostToDevRedOp(&opDev, info->op, info->datatype, comm));
 
-    if (comm->nRanks == 1) {
-      NCCLCHECK(ncclLaunchOneRank(info->recvbuff, info->sendbuff, info->count, opDev, info->datatype, info->stream));
-      return ncclSuccess;
-    } else {
+    // if (comm->nRanks == 1) {
+    //   NCCLCHECK(ncclLaunchOneRank(info->recvbuff, info->sendbuff, info->count, opDev, info->datatype, info->stream));
+    //   return ncclSuccess;
+    // } else
+    {
       // Must be in thread local group before tasks can be alloc'd in `comm->memScoped`.
       ncclGroupCommJoin(info->comm);
       struct ncclTaskColl* t = ncclMemoryPoolAlloc<struct ncclTaskColl>(&comm->memPool_ncclTaskColl, &comm->memPermanent);
