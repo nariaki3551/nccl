@@ -29,10 +29,10 @@ PKGDIR := $(BUILDDIR)/lib/pkgconfig
 ##### target files
 CUDARTLIB  ?= cudart_static
 
-ifeq ($(CUDARTLIB), cudart_static)
-	# Use compatibility shim only with static cudart; see https://github.com/NVIDIA/nccl/issues/658
-	LIBSRCFILES += enhcompat.cc
-endif
+# ifeq ($(CUDARTLIB), cudart_static)
+# 	# Use compatibility shim only with static cudart; see https://github.com/NVIDIA/nccl/issues/658
+# 	LIBSRCFILES += enhcompat.cc
+# endif
 
 INCTARGETS := $(INCEXPORTS:%=$(INCDIR)/%)
 LIBSONAME  := $(LIBNAME:%=%.$(NCCL_MAJOR))
