@@ -750,14 +750,6 @@ ncclResult_t ncclTopoComputeP2pChannels(struct ncclComm* comm) {
     }
   }
 
-  // Make nChannelsPerPeer and nChannels powers of 2. This is relied on when
-  // mapping p2p peers to channels.
-  comm->p2pnChannelsPerPeer = pow2Up(minChannels);
-  comm->p2pnChannels = pow2Up(comm->p2pnChannels);
-
-  comm->p2pnChannels = std::min(comm->p2pnChannels, pow2Down(ncclDevMaxChannelsForArgsBytes(ncclParamWorkArgsBytes())));
-  comm->p2pnChannelsPerPeer = std::min(comm->p2pnChannelsPerPeer, comm->p2pnChannels);
-
   // Init channels that weren't used so far
   for (int c=comm->nChannels; c<comm->p2pnChannels; c++) NCCLCHECK(initChannel(comm, c));
 

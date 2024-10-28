@@ -465,7 +465,7 @@ struct ncclComm {
   // int nvlsHeads[MAXCHANNELS];
   // Channels (per peer) for p2p
   int p2pnChannels;
-  int p2pnChannelsPerPeer;
+  // int p2pnChannelsPerPeer;
 
   // Should this comm allocate LL buffers for network P2P connections?
   bool allocP2pNetLLBuffers;
