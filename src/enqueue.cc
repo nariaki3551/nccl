@@ -1474,12 +1474,6 @@ static ncclResult_t reclaimPlan(struct ncclComm* comm, struct ncclCommCallback* 
       ncclMemoryPoolFree(&comm->memPool_ncclTaskColl, ct);
       ct = ct1;
     }
-    struct ncclTaskP2p* pt = ncclIntruQueueHead(&plan->p2pTaskQueue);
-    while (pt != nullptr) {
-      struct ncclTaskP2p* pt1 = pt->next;
-      ncclMemoryPoolFree(&comm->memPool_ncclTaskP2p, pt);
-      pt = pt1;
-    }
     ncclResult_t result = ncclSuccess;
     while (!ncclIntruQueueEmpty(&plan->cleanupQueue)) {
       struct ncclCommCallback* cb = ncclIntruQueueDequeue(&plan->cleanupQueue);

@@ -299,25 +299,6 @@ ncclResult_t ncclProfilerStartTaskEvents(struct ncclKernelPlan* plan) {
         ct->eActivationMask = eActivationMaskGroup;
         ct = ct->next;
       }
-      struct ncclTaskP2p* pt = ncclIntruQueueHead(&plan->p2pTaskQueue);
-      while (pt) {
-        ncclProfilerEventDescr_t eDescr = { 0 };
-        eDescr.type = ncclProfileP2p;
-        eDescr.parentObj = plan->groupEventHandle;
-        eDescr.rank = plan->comm->rank;
-        eDescr.p2p.name = plan->comm->commName;
-        eDescr.p2p.commHash = plan->comm->commHash;
-        eDescr.p2p.func = pt->func;
-        eDescr.p2p.buff = pt->buff;
-        eDescr.p2p.count = pt->count;
-        eDescr.p2p.datatype = pt->datatype;
-        eDescr.p2p.peer = pt->root;
-        ncclProfiler->startEvent(plan->comm->profilerContext, &pt->eventHandle, &eDescr);
-
-        // update collective task with group event activation mask
-        pt->eActivationMask = eActivationMaskGroup;
-        pt = pt->next;
-      }
     }
   }
   TIME_STOP_EVENT(taskStart);
@@ -333,11 +314,6 @@ ncclResult_t ncclProfilerStopTaskEvents(struct ncclKernelPlan* plan) {
       while (ct) {
         ncclProfiler->stopEvent(ct->eventHandle);
         ct = ct->next;
-      }
-      struct ncclTaskP2p* pt = ncclIntruQueueHead(&plan->p2pTaskQueue);
-      while (pt) {
-        ncclProfiler->stopEvent(pt->eventHandle);
-        pt = pt->next;
       }
     }
   }
