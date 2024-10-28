@@ -144,34 +144,8 @@ ncclResult_t ncclCollPreconnectFunc(struct ncclAsyncJob* job_) {
   for (int i = 0; i < NCCL_NUM_ALGORITHMS; ++i) {
     if (job->algoNeedConnect[i]) {
       switch (i) {
-        case NCCL_ALGO_RING: {
-          NCCLCHECKGOTO(ncclTransportRingConnect(comm), ret, fail);
-          break;
-        }
-        case NCCL_ALGO_TREE: {
-          NCCLCHECKGOTO(ncclTransportTreeConnect(comm), ret, fail);
-          break;
-        }
-        // case NCCL_ALGO_NVLS: {
-        //   /* If we are using NVLS_TREE algo, we must mark NVLS algo to set up
-        //    * NVLS intra-node buffer */
-        //   NCCLCHECKGOTO(ncclNvlsBufferSetup(comm), ret, fail);
-        //   break;
-        // }
-        // case NCCL_ALGO_NVLS_TREE: {
-        //   NCCLCHECKGOTO(ncclNvlsTreeConnect(comm), ret, fail);
-        //   break;
-        // }
-        case NCCL_ALGO_COLLNET_CHAIN: {
-          NCCLCHECKGOTO(ncclCollNetChainBufferSetup(comm), ret, fail);
-          break;
-        }
         case NCCL_ALGO_COLLNET_DIRECT: {
           NCCLCHECKGOTO(ncclCollNetDirectBufferSetup(comm), ret, fail);
-          break;
-        }
-        case NCCL_ALGO_PAT: {
-          NCCLCHECKGOTO(ncclTransportPatConnect(comm), ret, fail);
           break;
         }
         // Yes, it's a dead code.  That's fine...

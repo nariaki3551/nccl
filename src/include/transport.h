@@ -127,10 +127,6 @@ ncclResult_t ncclCollnetLocalRegisterBuffer(struct ncclComm* comm, const void* u
 ncclResult_t ncclCollnetGraphRegisterBuffer(struct ncclComm* comm, const void* userbuff, size_t buffSize, int type, int* outRegBufFlag, void** outHandle, struct ncclIntruQueue<struct ncclCommCallback, &ncclCommCallback::next>* cleanupQueue, int* nCleanupQueueElts);
 ncclResult_t ncclCollnetDeregBuffer(struct ncclComm* comm, struct ncclProxyConnector* proxyconn, void* handle);
 
-ncclResult_t ncclTransportRingConnect(struct ncclComm* comm);
-ncclResult_t ncclTransportTreeConnect(struct ncclComm* comm);
-ncclResult_t ncclTransportPatConnect(struct ncclComm* comm);
-
 ncclResult_t ncclCollNetSetup(ncclComm_t comm, ncclComm_t parent, struct ncclTopoGraph* graphs[]);
 ncclResult_t ncclCollNetChainBufferSetup(ncclComm_t comm);
 ncclResult_t ncclCollNetDirectBufferSetup(ncclComm_t comm);
