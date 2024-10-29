@@ -417,10 +417,7 @@ static ncclResult_t ProxyAppend(struct ncclProxyProgressState* state, struct ncc
   struct ncclProxyArgs* args = *connection->proxyAppendPtr;
 
   if (args) {
-    if (shared && args->opCount == op->opCount) {
-      NCCLCHECK(ncclProxyOpToArgs(op, args, 1));
-      DEBUG_PROXY_PRINT("Insert (%d/%5ld/%5ld) as group with %5ld\n", shared, args->opCount, op->opCount, OP_INDEX(args));
-    } else {
+    {
       struct ncclProxyArgs* prevArgs = args;
       NCCLCHECK(allocateArgs(state, &args));
       NCCLCHECK(ncclProxyOpToArgs(op, args, 0));
