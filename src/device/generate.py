@@ -158,7 +158,7 @@ def enumerate_func_rows():
     for algo in algos:
       for proto in all_protos:
         yield (coll, None, None, algo, proto)
-  for coll in ("AllReduce", "Reduce", "ReduceScatter"):
+  for coll in ("AllReduce", "ReduceScatter"):
     algos = algos_of_coll[coll]
     for redop in all_redops:
       for ty in all_tys:

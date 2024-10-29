@@ -551,13 +551,6 @@ inline int ncclDevFuncId(int coll, int devRedOp, int type, int algo, int proto) 
     }
     row += ncclNumDevRedOps*NumTypes*nAlgos*NCCL_NUM_PROTOCOLS;
 
-    nAlgos = 1;
-    if (coll == ncclFuncReduce) {
-      row += (devRedOp*NumTypes + type)*NCCL_NUM_PROTOCOLS + proto;
-      break;
-    }
-    row += ncclNumDevRedOps*NumTypes*nAlgos*NCCL_NUM_PROTOCOLS;
-
     nAlgos = 4;
     if (coll == ncclFuncReduceScatter) {
       int algo1 = algo == NCCL_ALGO_RING ? 0 :
