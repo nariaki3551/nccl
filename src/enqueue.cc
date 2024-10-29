@@ -1065,7 +1065,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
   }
   #endif
   // Standard kernel launch
-  CUCHECK(cuLaunchKernel(fn, grid.x, grid.y, grid.z, block.x, block.y, block.z, smem, launchStream, nullptr, extra));
+  // CUCHECK(cuLaunchKernel(fn, grid.x, grid.y, grid.z, block.x, block.y, block.z, smem, launchStream, nullptr, extra));
   //CUDACHECK(cudaLaunchKernel(fnAddr, grid, block, args, smem, launchStream));
   return ncclSuccess;
 }

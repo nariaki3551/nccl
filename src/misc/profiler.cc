@@ -387,7 +387,7 @@ ncclResult_t ncclProfilerStartSendProxyStepEvents(int s, struct ncclProxyArgs* a
         eDescr.parentObj = sub->opEventHandle;
         eDescr.rank = sub->rank;
         eDescr.proxyStep.step = step;
-        ncclProfiler->startEvent(args->profilerContext, &sub->stepEventHandles[step%NCCL_STEPS], &eDescr);
+        ncclProfiler->startEvent(args->profilerContext, &sub->stepEventHandles[0], &eDescr);
       }
     }
   }
@@ -406,7 +406,7 @@ ncclResult_t ncclProfilerStartRecvProxyStepEvents(int s, struct ncclProxyArgs* a
         eDescr.parentObj = sub->opEventHandle;
         eDescr.rank = sub->rank;
         eDescr.proxyStep.step = step;
-        ncclProfiler->startEvent(args->profilerContext, &sub->stepEventHandles[step%NCCL_STEPS], &eDescr);
+        ncclProfiler->startEvent(args->profilerContext, &sub->stepEventHandles[0], &eDescr);
       }
     }
   }
@@ -419,9 +419,9 @@ ncclResult_t ncclProfilerStopProxyStepEvents(int s, struct ncclProxyArgs* args, 
   struct ncclProxySubArgs* sub = &args->subs[s];
   if (__builtin_expect(ncclProfiler != NULL, 0)) {
     for (uint64_t step = stepLo; step < stepHi; step++) {
-      if (sub->stepEventHandles[step%NCCL_STEPS]) {
-        ncclProfiler->stopEvent(sub->stepEventHandles[step%NCCL_STEPS]);
-        sub->stepEventHandles[step%NCCL_STEPS] = NULL;
+      if (sub->stepEventHandles[0]) {
+        ncclProfiler->stopEvent(sub->stepEventHandles[0]);
+        sub->stepEventHandles[0] = NULL;
       }
     }
   }
@@ -474,8 +474,8 @@ ncclResult_t ncclProfilerRecordProxyStepEventStates(int s, struct ncclProxyArgs*
   struct ncclProxySubArgs* sub = &args->subs[s];
   if (__builtin_expect(ncclProfiler != NULL, 0) && sub->opEventHandle) {
     for (uint64_t step = stepLo; step < stepHi; step++) {
-      if (sub->stepEventHandles[step%NCCL_STEPS]) {
-        ncclProfiler->recordEventState(sub->stepEventHandles[step%NCCL_STEPS], eState, 0);
+      if (sub->stepEventHandles[0]) {
+        ncclProfiler->recordEventState(sub->stepEventHandles[0], eState, 0);
       }
     }
   }

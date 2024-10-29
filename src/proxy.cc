@@ -397,7 +397,6 @@ static ncclResult_t ncclProxyOpToArgs(struct ncclProxyOp* op, struct ncclProxyAr
 
 static ncclResult_t ProxyAppend(struct ncclProxyProgressState* state, struct ncclProxyOp* op) {
   struct ncclProxyConnection* connection = op->connection;
-  int shared = connection->shared;
   struct ncclProxyArgs* args = *connection->proxyAppendPtr;
 
   if (args) {
