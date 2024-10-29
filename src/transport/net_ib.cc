@@ -83,44 +83,12 @@ struct ncclIbDev ncclIbDevs[MAX_IB_DEVS];
 pthread_mutex_t ncclIbLock = PTHREAD_MUTEX_INITIALIZER;
 static int ncclIbRelaxedOrderingEnabled = 0;
 
-NCCL_PARAM(IbGidIndex, "IB_GID_INDEX", -1);
-NCCL_PARAM(IbRoutableFlidIbGidIndex, "IB_ROUTABLE_FLID_GID_INDEX", 1);
-NCCL_PARAM(IbRoceVersionNum, "IB_ROCE_VERSION_NUM", 2);
-NCCL_PARAM(IbTimeout, "IB_TIMEOUT", 20);
-NCCL_PARAM(IbRetryCnt, "IB_RETRY_CNT", 7);
-NCCL_PARAM(IbPkey, "IB_PKEY", 0);
-NCCL_PARAM(IbUseInline, "IB_USE_INLINE", 0);
-NCCL_PARAM(IbSl, "IB_SL", 0);
-NCCL_PARAM(IbTc, "IB_TC", 0);
-NCCL_PARAM(IbArThreshold, "IB_AR_THRESHOLD", 8192);
 NCCL_PARAM(IbPciRelaxedOrdering, "IB_PCI_RELAXED_ORDERING", 2);
 NCCL_PARAM(IbAdaptiveRouting, "IB_ADAPTIVE_ROUTING", -2);
-NCCL_PARAM(IbFifoTc, "IB_FIFO_TC", 0);
-NCCL_PARAM(IbAsyncEvents,"IB_RETURN_ASYNC_EVENTS",1);
-NCCL_PARAM(IbEceEnable,"IB_ECE_ENABLE",1);
 
 static ncclResult_t ncclIbStatsInit(struct ncclIbStats* stat) {
   __atomic_store_n(&stat->fatalErrorCount, 0, __ATOMIC_RELAXED);
   return ncclSuccess;
-}
-static void ncclIbStatsFatalError(struct ncclIbStats* stat){
-  __atomic_fetch_add(&stat->fatalErrorCount, 1, __ATOMIC_RELAXED);
-}
-static ncclResult_t ncclIbStatsCheckFatalCount(struct ncclIbStats* stat, const char* funcName) {
-  if (ncclParamIbAsyncEvents() && __atomic_load_n(&stat->fatalErrorCount, __ATOMIC_RELAXED)) {
-    WARN("communicator encountered a fatal error (detected in %s)\n", funcName);
-    return ncclSystemError;
-  }
-  return ncclSuccess;
-}
-static void ncclIbQpFatalError(struct ibv_qp* qp) {
-  ncclIbStatsFatalError((struct ncclIbStats*)qp->qp_context);
-}
-static void ncclIbCqFatalError(struct ibv_cq* cq) {
-  ncclIbStatsFatalError((struct ncclIbStats*)cq->cq_context);
-}
-static void ncclIbDevFatalError(struct ncclIbDev* dev) {
-  ncclIbStatsFatalError(&dev->stats);
 }
 
 pthread_t ncclIbAsyncThread;
@@ -138,19 +106,16 @@ static void* ncclIbAsyncThreadMain(void* args) {
     case IBV_EVENT_DEVICE_FATAL:
       // the above is device fatal error
       WARN("NET/IB : %s:%d async fatal event: %s", dev->devName, dev->portNum, str);
-      ncclIbDevFatalError(dev);
       break;
     case IBV_EVENT_CQ_ERR:
       // the above is a CQ fatal error
       WARN("NET/IB : %s:%d async fatal event on CQ (%p): %s", dev->devName, dev->portNum, cq, str);
-      ncclIbCqFatalError(cq);
       break;
     case IBV_EVENT_QP_FATAL:
     case IBV_EVENT_QP_REQ_ERR:
     case IBV_EVENT_QP_ACCESS_ERR:
       // the above are QP fatal errors
       WARN("NET/IB : %s:%d async fatal event on QP (%p): %s", dev->devName, dev->portNum, qp, str);
-      ncclIbQpFatalError(qp);
       break;
     case IBV_EVENT_SRQ_ERR:
       // SRQ are not used in NCCL
@@ -243,20 +208,6 @@ static int ncclIbRelaxedOrderingCapable(void) {
 
 // Compare ncclIbDev[dev] to all stored mergedIbDevs
 int ncclIbFindMatchingDev(int dev) {
-  for (int i = 0; i < ncclNMergedIbDevs; i++) {
-    if (ncclIbMergedDevs[i].ndevs < NCCL_IB_MAX_DEVS_PER_NIC) {
-      int compareDev = ncclIbMergedDevs[i].devs[0];
-      if (strcmp(ncclIbDevs[dev].pciPath, ncclIbDevs[compareDev].pciPath) == 0 &&
-          (ncclIbDevs[dev].guid == ncclIbDevs[compareDev].guid) &&
-          (ncclIbDevs[dev].link == ncclIbDevs[compareDev].link)) {
-          TRACE(NCCL_NET, "NET/IB: Matched name1=%s pciPath1=%s guid1=0x%lx link1=%u name2=%s pciPath2=%s guid2=0x%lx link2=%u",
-            ncclIbDevs[dev].devName, ncclIbDevs[dev].pciPath, ncclIbDevs[dev].guid, ncclIbDevs[dev].link,
-            ncclIbDevs[compareDev].devName, ncclIbDevs[compareDev].pciPath, ncclIbDevs[compareDev].guid, ncclIbDevs[compareDev].link);
-          return i;
-      }
-    }
-  }
-
   return ncclNMergedIbDevs;
 }
 
@@ -522,13 +473,7 @@ ncclResult_t ncclIbGetProperties(int dev, ncclNetProperties_t* props) {
   props->pciPath = ibDev->pciPath;
   props->guid = ibDev->guid;
   props->ptrSupport = NCCL_PTR_HOST;
-  if (ncclIbGdrSupport() == ncclSuccess) {
-    props->ptrSupport |= NCCL_PTR_CUDA; // GDR support via nv_peermem
-  }
   props->regIsGlobal = 1;
-  if (ncclIbDmaBufSupport(dev) == ncclSuccess) {
-    props->ptrSupport |= NCCL_PTR_DMABUF; // GDR support via DMA-BUF
-  }
   props->latency = 0; // Not set
   props->port = ibDev->portNum + ibDev->realPort;
   props->maxComms = ibDev->maxQp;
@@ -541,8 +486,6 @@ ncclResult_t ncclIbGetProperties(int dev, ncclNetProperties_t* props) {
 // We need to support NCCL_NET_MAX_REQUESTS for each concurrent receive
 #define MAX_REQUESTS (NCCL_NET_MAX_REQUESTS*NCCL_NET_IB_MAX_RECVS)
 static_assert(MAX_REQUESTS <= 256, "request id are encoded in wr_id and we need up to 8 requests ids per completion");
-
-NCCL_PARAM(IbQpsPerConn, "IB_QPS_PER_CONNECTION", 1);
 
 ncclNet_t ncclNetIb = {
   "IB",
