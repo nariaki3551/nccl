@@ -244,28 +244,6 @@ static ncclResult_t cleanupIpc(struct ncclComm* comm, struct ncclCommCallback* c
   return ncclSuccess;
 }
 
-static ncclResult_t registerCheckP2PConnection(struct ncclComm* comm, struct ncclConnector* conn, struct ncclTopoGraph* graph, int peer, bool* needReg) {
-  if (conn->connected) {
-    if (conn->conn.flags & (NCCL_IPC_READ | NCCL_IPC_WRITE | NCCL_DIRECT_READ | NCCL_DIRECT_WRITE)) {
-      *needReg = true;
-    } else {
-      // network connection
-      *needReg = false;
-    }
-  } else {
-    struct ncclPeerInfo* peerInfo = &comm->peerInfo[peer];
-    struct ncclPeerInfo* myInfo = &comm->peerInfo[comm->rank];
-    int canConnect = 0;
-    NCCLCHECK(ncclTransports[0]->canConnect(&canConnect, comm, graph, myInfo, peerInfo));
-    if (canConnect) {
-      *needReg = true;
-    } else {
-      *needReg = false;
-    }
-  }
-  return ncclSuccess;
-}
-
 static ncclResult_t registerCollBuffers(
     struct ncclComm* comm, struct ncclTaskColl* info,
     void* outRegBufSend[NCCL_MAX_LOCAL_RANKS],
@@ -567,111 +545,6 @@ static ncclResult_t scheduleCollTasksToPlan(
         addWorkBatchToPlan(comm, plan, c, workNode->workType, task->devFuncId, plan->workBytes);
         NCCLCHECK(addProxyOpIfNeeded(comm, plan, &proxyOp));
       }
-    } else { // not task->isCollnet
-      int trafficPerByte = ncclFuncTrafficPerByte(task->func, comm->nRanks);
-      size_t cellSize = divUp(divUp(MinTrafficPerChannel, (size_t)trafficPerByte), 16) * 16;
-      int elementsPerCell = cellSize/elementSize;
-      size_t cells = divUp(task->count*elementSize, cellSize);
-      size_t trafficPerElement = elementSize*trafficPerByte;
-      size_t trafficPerCell = cellSize*trafficPerByte;
-      size_t cellsPerChannel = std::min(cells, divUp(trafficPerChannel, trafficPerCell));
-      size_t cellsLo;
-      if (channelId+1 == nMaxChannels[kind]) { // On last channel everything goes to "lo"
-        cellsLo = cells;
-      } else {
-        cellsLo = std::min(cells, divUp((trafficPerChannel-currentTraffic),trafficPerCell));
-      }
-      int nMidChannels = (cells-cellsLo)/cellsPerChannel;
-      size_t cellsHi = (cells-cellsLo)%cellsPerChannel;
-      int nChannels = (cellsLo!=0 ? 1 : 0) + nMidChannels + (cellsHi!=0 ? 1 : 0);
-      if (nMaxChannels[kind] < channelId + nChannels) { // Overflowed available channels
-        nMidChannels = nMaxChannels[kind] - channelId - 2;
-        cellsPerChannel = (cells-cellsLo)/(nMidChannels+1);
-        cellsHi = cellsPerChannel + (cells-cellsLo)%(nMidChannels+1);
-      }
-      if (cellsHi == 0 && nMidChannels != 0) {
-        cellsHi = cellsPerChannel;
-        nMidChannels -= 1;
-      }
-      if (cellsLo == 0) { // Least channel skipped. Make the next channel the new least.
-        channelId += 1;
-        if (nMidChannels == 0) { cellsLo = cellsHi; cellsHi = 0; }
-        else { cellsLo = cellsPerChannel; nMidChannels -= 1; }
-      }
-      size_t countMid = nMidChannels!=0 ? cellsPerChannel*elementsPerCell : 0;
-      size_t countLo = cellsLo*elementsPerCell;
-      size_t countHi = cellsHi*elementsPerCell;
-      (countHi != 0 ? countHi : countLo) -= cells*elementsPerCell - task->count;
-
-      nChannels = (countLo!=0 ? 1 : 0) + nMidChannels + (cellsHi!=0 ? 1 : 0);
-      // Ensure room for worst case of one new batch per channel
-      if (!testBudget(budget, plan->nWorkBatches + nChannels, plan->workBytes + workNode->size)) {
-        return ncclSuccess;
-      }
-
-      devWork->channelLo = channelId;
-      devWork->channelHi = channelId + nChannels-1;
-      devWork->cbd.countLo = countLo;
-      devWork->cbd.countMid = countMid;
-      devWork->cbd.countHi = countHi;
-
-      // calcCollChunking() uses global bytes instead of traffic which differs
-      // in that allreduce isn't multiplied by 2.
-      size_t globalBytesPerElement = elementSize*ncclFuncMaxSendRecvCount(task->func, comm->nRanks, 1);
-      struct ncclProxyOp proxyOpLo, proxyOpMid, proxyOpHi;
-
-      uint32_t chunkSize, directFlags=0;
-      size_t grainSize = ncclProtoGrainSize(task->protocol);
-      if (countLo != 0) {
-        NCCLCHECK(calcCollChunking(comm, task, /*nChannels=*/1, globalBytesPerElement*countLo, &chunkSize, &directFlags, &proxyOpLo));
-        devWork->cbd.chunkGrainsLo = chunkSize/grainSize;
-      }
-      if (countHi != 0) {
-        NCCLCHECK(calcCollChunking(comm, task, /*nChannels=*/1, globalBytesPerElement*countHi, &chunkSize, &directFlags, &proxyOpHi));
-        devWork->cbd.chunkGrainsHi = chunkSize/grainSize;
-      }
-      if (nMidChannels != 0) {
-        NCCLCHECK(calcCollChunking(comm, task, /*nChannels=*/1, globalBytesPerElement*countMid, &chunkSize, &directFlags, &proxyOpMid));
-        devWork->cbd.chunkGrainsMid = chunkSize/grainSize;
-      }
-      devWork->direct = directFlags;
-
-      // Update the current channel and vacant traffic budget.
-      if (countHi != 0) {
-        channelId += nChannels-1;
-        currentTraffic = cellsHi*elementsPerCell*trafficPerElement;
-      } else if (nMidChannels != 0) {
-        channelId += nChannels;
-        currentTraffic = 0;
-      } else {
-        currentTraffic += cellsLo*elementsPerCell*trafficPerElement;
-      }
-
-      if (currentTraffic >= trafficPerChannel && channelId+1 != nMaxChannels[kind]) {
-        channelId += 1;
-        currentTraffic = 0;
-      }
-
-      uint64_t proxyOpId = uint64_t(plan->collOpCount++)<<1 | 0;
-      for (int c=devWork->channelLo; c <= (int)devWork->channelHi; c++) {
-        struct ncclProxyOp* proxyOp;
-        if (c == (int)devWork->channelLo) {
-          proxyOp = &proxyOpLo;
-        } else if (c == (int)devWork->channelHi) {
-          proxyOp = &proxyOpHi;
-        } else {
-          proxyOp = &proxyOpMid;
-        }
-        proxyOp->channelId = c;
-        proxyOp->opCount = proxyOpId;
-        proxyOp->task.coll = task;
-        proxyOp->rank = comm->rank;
-        addWorkBatchToPlan(comm, plan, c, workNode->workType, task->devFuncId, plan->workBytes);
-        // Coverity reports "proxyOp->connection" as being possibly uninitialized.  It's hard to
-        // determine if that's actually true but it's also not clear if that would be an issue.
-        // coverity[uninit_use_in_call:FALSE]
-        NCCLCHECK(addProxyOpIfNeeded(comm, plan, proxyOp));
-      }
     }
 
     plan->channelMask |= (2ull<<devWork->channelHi) - (1ull<<devWork->channelLo);
@@ -799,50 +672,6 @@ static int calcP2pChannelCount(size_t totalSize, int minChannels, int maxChannel
 //   return ncclSuccess;
 // }
 
-// Spin until its safe to increase comm->workFifoProduced to desiredProduced.
-static void waitWorkFifoAvailable(struct ncclComm* comm, uint32_t desiredProduced) {
-  bool hasRoom = (desiredProduced - comm->workFifoConsumedLeast) <= comm->workFifoBytes;
-  if (hasRoom) return;
-  while (true) {
-    // We have to poll for notifications from device.
-    uint32_t* consumedLive = comm->workFifoConsumed;
-    uint32_t consumed[MAXCHANNELS];
-    for (int c=0; c < MAXCHANNELS; c++) {
-      consumed[c] = __atomic_load_n(&consumedLive[c], __ATOMIC_RELAXED);
-    }
-    // Compiler-only fence to prevent fusion of loops to encourage dense loads.
-    __atomic_signal_fence(__ATOMIC_SEQ_CST);
-
-    uint32_t produced = comm->workFifoProduced;
-    uint32_t consumedLeast = produced;
-    for (int c=0; c < MAXCHANNELS; c++) {
-      // consumedLeast is min over all non-quiesced channels
-      if (consumed[c] != comm->channels[c].workFifoProduced) {
-        if ((produced - consumedLeast) < (produced - consumed[c])) {
-          consumedLeast = consumed[c];
-        }
-      }
-    }
-
-    // Compiler only fence to prevent fusion of loops to encourage dense stores.
-    __atomic_signal_fence(__ATOMIC_SEQ_CST);
-
-    for (int c=0; c < MAXCHANNELS; c++) {
-      // Advance counter on quiesced channels so they don't lag behind
-      // too far where they could get lost in 32-bit wraparound.
-      if (consumed[c] == comm->channels[c].workFifoProduced) {
-        comm->channels[c].workFifoProduced = consumedLeast;
-        __atomic_store_n(&consumedLive[c], consumedLeast, __ATOMIC_RELAXED);
-      }
-    }
-    comm->workFifoConsumedLeast = consumedLeast;
-
-    hasRoom = (desiredProduced - comm->workFifoConsumedLeast) <= comm->workFifoBytes;
-    if (hasRoom) break;
-    sched_yield();
-  }
-}
-
 namespace {
   struct uploadWork_cleanup_t {
     struct ncclCommEventCallback base;
@@ -871,19 +700,19 @@ static ncclResult_t uploadWork(struct ncclComm* comm, struct ncclKernelPlan* pla
     fifoCursor = sizeof(ncclDevKernelArgs) + batchBytes;
     fifoMask = ~0u;
     break;
-  case ncclDevWorkStorageTypeFifo:
-    fifoBufHost = comm->workFifoBuf;
-    fifoCursor = comm->workFifoProduced;
-    fifoMask = comm->workFifoBytes-1;
-    waitWorkFifoAvailable(comm, fifoCursor + workBytes);
-    plan->kernelArgs->workBuf = comm->workFifoBufDev;
-    break;
-  case ncclDevWorkStorageTypePersistent:
-    static_assert(16 <= alignof(max_align_t), "We rely on 16-byte alignment.");
-    fifoBufHost = malloc(workBytes);
-    fifoCursor = 0;
-    fifoMask = ~0u;
-    break;
+  // case ncclDevWorkStorageTypeFifo:
+  //   fifoBufHost = comm->workFifoBuf;
+  //   fifoCursor = comm->workFifoProduced;
+  //   fifoMask = comm->workFifoBytes-1;
+  //   waitWorkFifoAvailable(comm, fifoCursor + workBytes);
+  //   plan->kernelArgs->workBuf = comm->workFifoBufDev;
+  //   break;
+  // case ncclDevWorkStorageTypePersistent:
+  //   static_assert(16 <= alignof(max_align_t), "We rely on 16-byte alignment.");
+  //   fifoBufHost = malloc(workBytes);
+  //   fifoCursor = 0;
+  //   fifoMask = ~0u;
+  //   break;
   default:
     return ncclInternalError;
   }
@@ -1020,15 +849,6 @@ static ncclResult_t hostStreamPlanTask(struct ncclComm* comm, struct ncclKernelP
   return ncclSuccess;
 }
 
-static void CUDART_CB hostStreamPlanCallback(void *plan_) {
-  NVTX3_FUNC_RANGE_IN(nccl_domain);
-  struct ncclKernelPlan* plan = (struct ncclKernelPlan*)plan_;
-  ncclResult_t result = hostStreamPlanTask(plan->comm, plan);
-  if (result != ncclSuccess) {
-    WARN("hostStreamPlanCallback() failed : %s", ncclGetErrorString(result));
-  }
-}
-
 static ncclResult_t reclaimPlan(struct ncclComm* comm, struct ncclCommCallback* me) {
   struct ncclKernelPlan* plan = (struct ncclKernelPlan*)me; // cast from first member `reclaim`
   if (plan->persistent) {
@@ -1061,16 +881,6 @@ static ncclResult_t reclaimPlan(struct ncclComm* comm, struct ncclCommCallback* 
   }
   ncclMemoryPoolFree(&comm->memPool_ncclKernelPlan, plan);
   return ncclSuccess;
-}
-
-static void persistentDestructor(void* plans_) {
-  struct ncclKernelPlan* plan = (struct ncclKernelPlan*)plans_;
-  struct ncclComm* comm = plan->comm;
-  while (plan != nullptr) {
-    struct ncclKernelPlan* next = plan->next;
-    ncclIntruQueueMpscEnqueue(&comm->callbackQueue, &plan->reclaimer);
-    plan = next;
-  }
 }
 
 ncclResult_t ncclLaunchPrepare(struct ncclComm* comm) {
@@ -1158,7 +968,7 @@ ncclResult_t ncclLaunchPrepare(struct ncclComm* comm) {
             acquired = true;
             NCCLCHECKGOTO(ncclStrongStreamAcquire(planner->capturingGraph, &comm->sharedRes->hostStream), result, failure);
           }
-          NCCLCHECKGOTO(ncclStrongStreamLaunchHost(planner->capturingGraph, &comm->sharedRes->hostStream, hostStreamPlanCallback, plan), result, failure);
+          // NCCLCHECKGOTO(ncclStrongStreamLaunchHost(planner->capturingGraph, &comm->sharedRes->hostStream, hostStreamPlanCallback, plan), result, failure);
         }
       }
       if (acquired) {
@@ -1168,10 +978,6 @@ ncclResult_t ncclLaunchPrepare(struct ncclComm* comm) {
       }
     }
 
-    if (persistent) {
-      comm->persistentRefs += nPlans;
-      NCCLCHECKGOTO(ncclCudaGraphAddDestructor(planner->capturingGraph, persistentDestructor, (void*)planHead), result, failure);
-    }
   }
 failure:
   return result;
