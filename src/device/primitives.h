@@ -137,4 +137,6 @@ struct PrimitivesWithoutDirect {
 };
 
 #include "prims_simple.h"
+#include "prims_ll.h"
+#include "prims_ll128.h"
 #endif
