@@ -36,10 +36,6 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
   union ncclLLFifoLine* recvBuff[MaxRecv];
   union ncclLLFifoLine* sendBuff[MaxSend];
 
-  inline __device__ int recvOffset(int i) { return (recvStep[i]%NCCL_STEPS)*stepLines; }
-  inline __device__ int sendOffset(int i) { return (sendStep[i]%NCCL_STEPS)*stepLines; }
-  inline __device__ union ncclLLFifoLine* recvPtr(int i) { return recvBuff[i]+recvOffset(i); }
-  inline __device__ union ncclLLFifoLine* sendPtr(int i) { return sendBuff[i]+sendOffset(i); }
   inline __device__ uint32_t recvFlag(int i) { return NCCL_LL_FLAG(recvStep[i]+1); }
   inline __device__ uint32_t sendFlag(int i) { return NCCL_LL_FLAG(sendStep[i]+1); }
 
@@ -71,7 +67,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
       }
       if (sendConnFifo) {
         int size = ((sendConnHead & NCCL_LL_CLEAN_MASK) == NCCL_LL_CLEAN_MASK) ? stepLines*sizeof(union ncclLLFifoLine) : nbytes;
-        sendConnFifo[sendConnHead%NCCL_STEPS].size = size;
+        sendConnFifo[0].size = size;
       }
       sendConnHead += 1;
     }
@@ -90,13 +86,13 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
     // LL Cleanup : write all flags in the slice to make sure we don't have
     // data corruption when flag loops over.
     if ((sendStep[i] & NCCL_LL_CLEAN_MASK) == NCCL_LL_CLEAN_MASK) {
-      for (int o = offset; o<stepLines; o+=nthreads) storeLL(sendPtr(i)+o, 0, sendFlag(i));
+      for (int o = offset; o<stepLines; o+=nthreads) storeLL(sendBuff[i]+o, 0, sendFlag(i));
     }
     sendStep[i]++;
   }
 
   __device__ uint64_t readLL(int offset, int i) {
-    union ncclLLFifoLine* src = recvPtr(i) + offset;
+    union ncclLLFifoLine* src = recvBuff[i] + offset;
     uint32_t flag = recvFlag(i);
     uint32_t data1, flag1, data2, flag2;
     int spins = 0;
@@ -115,13 +111,13 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
       // Yes, for some template arguments this code will be unreachable.  That's fine.
       // coverity[dead_error_line]
       if (i < fan.nrecv()) {
-        union ncclLLFifoLine* src = recvPtr(i) + offset;
+        union ncclLLFifoLine* src = recvBuff[i] + offset;
         asm volatile("ld.volatile.global.v4.u32 {%0,%1,%2,%3}, [%4];" : "=r"(line[i].data1), "=r"(line[i].flag1), "=r"(line[i].data2), "=r"(line[i].flag2) : "l"(&src->i4) : "memory");
       }
     }
   }
   __device__ uint64_t readLLFinish(int offset, ncclLLFifoLine(&line)[MaxRecv], int i) {
-    union ncclLLFifoLine* src = recvPtr(i) + offset;
+    union ncclLLFifoLine* src = recvBuff[i] + offset;
     uint32_t flag = recvFlag(i);
     int spins = 0;
     while (line[i].flag1 != flag || line[i].flag2 != flag) {
@@ -282,8 +278,8 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
         // Yes, for some template arguments this code will be unreachable.  That's fine.
         // coverity[dead_error_line]
         for (int i=1; i < MaxSend && i < fan.nsend(); i++)
-          storeLL(sendPtr(i)+offset, data, sendFlag(i));
-        storeLL(sendPtr(0)+offset, data, sendFlag(0));
+          storeLL(sendBuff[i]+offset, data, sendFlag(i));
+        storeLL(sendBuff[0]+offset, data, sendFlag(0));
       }
       if (DST) {
         storeData(dstElts, data, eltInLine);

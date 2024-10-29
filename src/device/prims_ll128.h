@@ -42,8 +42,8 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
   uint64_t* recvBuff[MaxRecv];
   uint64_t* sendBuff[MaxSend];
 
-  inline __device__ int recvOffset(int i) { return (recvStep[i]%NCCL_STEPS)*stepSize; }
-  inline __device__ int sendOffset(int i) { return (sendStep[i]%NCCL_STEPS)*stepSize; }
+  inline __device__ int recvOffset(int i) { return 0; }
+  inline __device__ int sendOffset(int i) { return 0; }
   inline __device__ uint64_t* recvPtr(int i) { return recvBuff[i]+recvOffset(i); }
   inline __device__ uint64_t* sendPtr(int i) { return sendBuff[i]+sendOffset(i); }
   inline __device__ uint64_t recvFlag(int i) { return recvStep[i]+1; }
@@ -72,7 +72,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
         if (checkAbort(spins, wid, 1)) break;
       }
       if (sendConnFifo) {
-        sendConnFifo[sendStep[wid]%NCCL_STEPS].size = nbytes;
+        sendConnFifo[0].size = nbytes;
       }
       sendConnHead += 1;
     }

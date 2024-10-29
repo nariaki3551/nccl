@@ -135,21 +135,21 @@ class Primitives<
 
     if (flags & (Recv*RoleWaitRecv | Send*RoleWaitSend)) {
       if (flags & ConnFifoEnabled)
-        connFifo[step%NCCL_STEPS].size = nelts*sizeof(T);
+        connFifo[0].size = nelts*sizeof(T);
 
       void **ptrs = isSendNotRecv ? (ncclShmem.groups[group].dsts + Dst)
                                   : (ncclShmem.groups[group].srcs + Src);
       if (flags & NetRegMode) {
          // Do nothing
-      } else if ((flags & ConnFifoEnabled) && connFifo[step%NCCL_STEPS].mode == NCCL_MODE_OFFSET) {
-        ptrs[index] = connEltsFifo + loadInt(&connFifo[step%NCCL_STEPS].offset)/sizeof(T);
+      } else if ((flags & ConnFifoEnabled) && connFifo[0].mode == NCCL_MODE_OFFSET) {
+        ptrs[index] = connEltsFifo + loadInt(&connFifo[0].offset)/sizeof(T);
       } else if (isSendNotRecv && DirectSend) {
         if (flags & (DirectWrite | NvlsDirectWrite | IpcWrite)) {
           ptrs[index] = directBuff + dstIx + offset;
         } else if ((flags & DirectRead) || (flags & IpcRead)) {  // empty send
           ptrs[index] = nullptr;
         } else {
-          ptrs[index] = connEltsFifo + (step%NCCL_STEPS)*connStepSize;
+          ptrs[index] = connEltsFifo;
         }
       } else if (!isSendNotRecv && DirectRecv) {
         if (flags & (DirectRead | NvlsDirectRead | IpcRead)) {
@@ -157,13 +157,13 @@ class Primitives<
         } else if ((flags & DirectWrite) || (flags & IpcWrite)) {
           ptrs[index] = directBuff + dstIx + offset;  // send to next from my output buffer
         } else {
-          ptrs[index] = connEltsFifo + (step%NCCL_STEPS)*connStepSize;
+          ptrs[index] = connEltsFifo;
         }
       }
       else {
         // Yes, for some template arguments this code will be unreachable.  That's fine.
         // coverity[dead_error_line]
-        ptrs[index] = connEltsFifo + (step%NCCL_STEPS)*connStepSize;
+        ptrs[index] = connEltsFifo;
       }
       if (flags & NetDeviceUnpack) {
         ncclNetDeviceIncrementHead(group, index);
@@ -342,8 +342,8 @@ public:
           }
           void **ptrs = isSendNotRecv ? ncclShmem.groups[group].dsts
                                       : ncclShmem.groups[group].srcs;
-          if ((flags & ConnFifoEnabled) && connFifo[step%NCCL_STEPS].mode == NCCL_MODE_OFFSET) {
-            int offset = loadInt(&connFifo[step%NCCL_STEPS].offset);
+          if ((flags & ConnFifoEnabled) && connFifo[0].mode == NCCL_MODE_OFFSET) {
+            int offset = loadInt(&connFifo[0].offset);
             ptrs[index] = connEltsFifo + offset/sizeof(T);
           } else if (Direct && fn.work->regUsed) {
             if (isSendNotRecv) {
@@ -352,7 +352,7 @@ public:
               } else if (flags & (DirectRead | IpcRead)) {  // empty send
                 ptrs[index] = nullptr;
               } else {
-                ptrs[index] = connEltsFifo + (step%NCCL_STEPS)*stepSize;
+                ptrs[index] = connEltsFifo;
               }
             } else {
               if (flags & (DirectRead | IpcRead)) {
@@ -363,11 +363,11 @@ public:
                 else
                   ptrs[index] = nullptr;
               } else {
-                ptrs[index] = connEltsFifo + (step%NCCL_STEPS)*stepSize;
+                ptrs[index] = connEltsFifo;
               }
             }
           } else {
-            ptrs[index] = connEltsFifo + (step%NCCL_STEPS)*stepSize;
+            ptrs[index] = connEltsFifo;
           }
         }
         subBarrier();
@@ -394,7 +394,7 @@ public:
         // coverity[dead_error_begin]
         dstSize = ncclShmem.groups[group].dstSizes[index];
         ncclShmem.groups[group].dstSizes[index] = 0;
-        if (flags & ConnFifoEnabled) connFifo[step%NCCL_STEPS].size = dstSize*sizeof(T);
+        if (flags & ConnFifoEnabled) connFifo[0].size = dstSize*sizeof(T);
       }
       barrier();
       if (flags & (Recv*(RoleWaitRecv|RolePostRecv) | Send*(RoleWaitSend|RolePostSend))) {
@@ -670,8 +670,8 @@ private:
       // Make sure we wait until the proxy has sent data before we return.
       // We don't want the next CUDA kernel to overwrite the send buffer which
       // was accessed directly.
-      uint64_t prevStep = step - StepPerSlice;
-      volatile ssize_t* ptr = &(connFifo[prevStep%NCCL_STEPS].size);
+      // uint64_t prevStep = step - StepPerSlice;
+      volatile ssize_t* ptr = &(connFifo[0].size);
       int spins = 0;
       while (*ptr != -1) if (checkAbort(spins)) break;
     }
@@ -899,7 +899,7 @@ private:
     T* userOutput = (T*)ncclShmem.groups[group].userOutput;
 
     if (recvPow2 >= 0 && recvPow2 == index && (flags & RoleWaitRecv)) {
-      ncclShmem.groups[group].srcs[0] = (T*)(connEltsFifo + (step%NCCL_STEPS)*connStepSize) + recvOffset;
+      ncclShmem.groups[group].srcs[0] = (T*)(connEltsFifo) + recvOffset;
       int spins = 0;
       while (connStepCache < step + StepPerSlice) {
         connStepCache = loadStepValue(connStepPtr);
@@ -913,13 +913,13 @@ private:
         connStepCache = loadStepValue(connStepPtr);
         if (checkAbort(spins)) break;
       }
-      ncclShmem.groups[group].dsts[0] = (T*)(connEltsFifo + ((step+sendStepOffset)%NCCL_STEPS)*connStepSize) + sendOffset;
+      ncclShmem.groups[group].dsts[0] = (T*)(connEltsFifo) + sendOffset;
       if (accSize < sendOffset + nelem + (step+sendStepOffset)*connStepSize) {
         // New data, add our own data to it.
         ncclShmem.groups[group].srcs[1] = userInput + inpIx;
         accSize = sendOffset + nelem + (step+sendStepOffset)*connStepSize;
         if (flags & ConnFifoEnabled)
-          connFifo[(step+sendStepOffset)%NCCL_STEPS].size = (sendOffset + nelem)*sizeof(T);
+          connFifo[0].size = (sendOffset + nelem)*sizeof(T);
       } else {
         // There is already data in there, accumulate instead of writing to it.
         ncclShmem.groups[group].srcs[1] = ncclShmem.groups[group].dsts[0];
@@ -959,7 +959,7 @@ private:
     T* userOutput = (T*)ncclShmem.groups[group].userOutput;
 
     if (recvPow2 >= 0 && recvPow2 == index && (flags & RoleWaitRecv)) {
-      ncclShmem.groups[group].srcs[0] = (T*)(connEltsFifo + ((step+recvStepOffset)%NCCL_STEPS)*connStepSize) + recvOffset;
+      ncclShmem.groups[group].srcs[0] = (T*)(connEltsFifo) + recvOffset;
       int spins = 0;
       while (connStepCache < step + recvStepOffset + StepPerSlice) {
         connStepCache = loadStepValue(connStepPtr);
@@ -980,10 +980,10 @@ private:
         connStepCache = loadStepValue(connStepPtr);
         if (checkAbort(spins)) break;
       }
-      ncclShmem.groups[group].dsts[0] = (T*)(connEltsFifo + (step%NCCL_STEPS)*connStepSize) + sendOffset;
+      ncclShmem.groups[group].dsts[0] = (T*)(connEltsFifo) + sendOffset;
       if (postSend) {
         if (flags & ConnFifoEnabled)
-          connFifo[step%NCCL_STEPS].size = (sendOffset + nelem)*sizeof(T);
+          connFifo[0].size = (sendOffset + nelem)*sizeof(T);
         step += StepPerSlice;
       }
     }

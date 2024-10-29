@@ -607,7 +607,7 @@ static int calcRegionOffset(
   struct ncclCollNetSharedRes* collNet = args->subs[0].connection->collNet;
   int slotSize = collNet->buffSize;
   int chunkSize = args->chunkSize;
-  int base = isRecvNotSend*NCCL_STEPS + (step%NCCL_STEPS);
+  int base = isRecvNotSend*NCCL_STEPS;
   base *= collNet->nChannels*slotSize;
   if (args->coll == ncclFuncAllReduce) {
     return base + (sub+side)*chunkSize;
@@ -647,7 +647,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
       auto reqFifo = resources->reqFifo;
 
       if (sub->posted < sub->nsteps && sub->posted < sub->done + NCCL_STEPS) {
-        int buffSlot = (sub->base+sub->posted)%NCCL_STEPS;
+        int buffSlot = 0;
         if (sub->reg == 0) {
           resources->recvMem->connFifo[buffSlot].offset = calcRegionOffset(args, 0, 0, sub->posted, 0);
           __sync_synchronize();
@@ -659,7 +659,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
         if (resources->gdcSync) wc_store_fence(); // Flush out WC write
       }
       if (sub->received < sub->posted && sub->received < sub->done + NCCL_STEPS) {
-        int buffSlot = (sub->base+sub->received)%NCCL_STEPS;
+        int buffSlot = 0;
         volatile struct ncclConnFifo* connFifo = (volatile struct ncclConnFifo*)resources->recvMem->connFifo;
         volatile uint64_t* recvTail = &resources->recvMem->tail;
         if ((connFifo[buffSlot].size != -1 || sub->reg) && ((*recvTail > (sub->base+sub->received)))) {
@@ -680,7 +680,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
       bool ordered = args->subs[0].transmitted == sub->transmitted;
       if (ordered && (sub->transmitted < sub->received)) {
         {
-          int buffSlot = (sub->base+sub->transmitted)%NCCL_STEPS;
+          int buffSlot = 0;
           if (!reqFifo[0][buffSlot].turnIsSendNotRecv) return ncclSuccess;
 
           ssize_t sizePerRank = 0;
@@ -796,7 +796,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
       // Check whether the network has completed some send operations.
       if (sub->done < sub->transmitted) {
         int done, size;
-        int buffSlot = (sub->base+sub->done)%NCCL_STEPS;
+        int buffSlot = 0;
         done = 1;
         if (sub->requests[buffSlot]) NCCLCHECK(proxyState->ncclCollNet->test((void*)(sub->requests[buffSlot]), &done, &size));
         if (done) {
@@ -845,7 +845,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
 
       // Enforce sync between operations of the same group.
       if ((sub->posted < sub->done + NCCL_STEPS) && (sub->posted < sub->nsteps)) {
-        int buffSlot = (sub->base+sub->posted)%NCCL_STEPS;
+        int buffSlot = 0;
         reqFifo[0][buffSlot].turnIsSendNotRecv = true;
         TRACE(NCCL_NET, "recvProxy [%ld/%d/%d] posted buffer", (long)sub->posted, 0, buffSlot);
         sub->posted += args->sliceSteps;
@@ -853,7 +853,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
         return ncclSuccess;
       }
       if ((sub->received < sub->posted)) {
-        int buffSlot = (sub->base+sub->received)%NCCL_STEPS;
+        int buffSlot = 0;
         if (!reqFifo[0][buffSlot].turnIsSendNotRecv) { // Buffer is cleared : coll is complete
           int recvBeg = calcRegionOffset(args, 1, 0, sub->received, 0);
           int recvEnd = calcRegionOffset(args, 1, 0, sub->received, 1);
@@ -910,7 +910,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
       }
       if ((sub->flushed < sub->received)) {
         // Progress flush operations
-        int buffSlot = (sub->base + sub->flushed)%NCCL_STEPS;
+        int buffSlot = 0;
         int done = 1;
         if (sub->requests[buffSlot]) NCCLCHECK(proxyState->ncclCollNet->test(sub->requests[buffSlot], &done, NULL));
         if (done) {
@@ -923,7 +923,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
       }
       if (sub->transmitted < sub->flushed) {
         if (sub->reg == 0) {
-          int buffSlot = (sub->base + sub->transmitted)%NCCL_STEPS;
+          int buffSlot = 0;
           volatile struct ncclConnFifo* connFifo = (volatile struct ncclConnFifo*)resources->recvMem->connFifo;
           connFifo[buffSlot].offset = calcRegionOffset(args, 1, 0, sub->transmitted, 0);
           __sync_synchronize();
