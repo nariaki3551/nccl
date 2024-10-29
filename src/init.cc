@@ -81,8 +81,6 @@ static void initOnceFunc() {
   initGdrCopy();
   // Always initialize bootstrap network
   NCCLCHECKGOTO(bootstrapNetInit(), initResult, exit);
-
-  initNvtxRegisteredEnums();
 exit:;
 }
 
