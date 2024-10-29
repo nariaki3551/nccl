@@ -132,12 +132,6 @@ struct recvResources {
   int collNetRank;
 };
 
-static ncclResult_t canConnect(int* ret, struct ncclComm* comm, struct ncclTopoGraph* graph, struct ncclPeerInfo* info1, struct ncclPeerInfo* info2) {
-  // This transport cannot be used for p2p
-  *ret = 0;
-  return ncclSuccess;
-}
-
 struct setupReq {
   int netDev;
   int useGdr;
@@ -1117,7 +1111,7 @@ static ncclResult_t recvProxyDeregBuffer(struct ncclProxyConnection* connection,
 
 struct ncclTransport collNetTransport = {
   "COL",
-  canConnect,
+  NULL,
   { sendSetup, sendConnect, sendFree, NULL, sendProxySetup, sendProxyConnect, sendProxyFree, sendProxyProgress, sendProxyRegBuffer, sendProxyDeregBuffer },
   { recvSetup, recvConnect, recvFree, NULL, recvProxySetup, recvProxyConnect, recvProxyFree, recvProxyProgress, recvProxyRegBuffer, recvProxyDeregBuffer }
 };
