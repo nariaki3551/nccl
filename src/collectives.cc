@@ -31,7 +31,7 @@ ncclResult_t ncclAllGather(const void* sendbuff, void* recvbuff, size_t sendcoun
 
   struct ncclInfo info = { ncclFuncAllGather, "AllGather",
     sendbuff, recvbuff, sendcount, datatype, ncclSum, 0, comm, stream, /* Args */
-    ALLGATHER_CHUNKSTEPS, ALLGATHER_SLICESTEPS };
+    1, 1 };
   NCCLCHECK(ncclEnqueueCheck(&info));
   return ncclSuccess;
 }
@@ -55,7 +55,7 @@ ncclResult_t ncclAllGather(const void* sendbuff, void* recvbuff, size_t sendcoun
 
 //   struct ncclInfo info = { ncclFuncAllReduce, "AllReduce",
 //     sendbuff, recvbuff, count, datatype, op, 0, comm, stream, /* Args */
-//     ALLREDUCE_CHUNKSTEPS, ALLREDUCE_SLICESTEPS };
+//     1, 1 };
 //   NCCLCHECK(ncclEnqueueCheck(&info));
 //   return ncclSuccess;
 // }
@@ -78,7 +78,7 @@ ncclResult_t ncclReduceScatter(const void* sendbuff, void* recvbuff, size_t recv
 
   struct ncclInfo info = { ncclFuncReduceScatter, "ReduceScatter",
     sendbuff, recvbuff, recvcount, datatype, op, 0, comm, stream, /* Args */
-    REDUCESCATTER_CHUNKSTEPS, REDUCESCATTER_SLICESTEPS };
+    1, 1 };
   NCCLCHECK(ncclEnqueueCheck(&info));
   return ncclSuccess;
 }
