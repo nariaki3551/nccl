@@ -336,20 +336,6 @@ build_ib_list:
         if (nPorts == 0 && ncclSuccess != wrap_ibv_close_device(context)) { ret = ncclInternalError; goto fail; }
       }
 
-      // Detect if there are both multi-port and single-port NICs in the system. If so, disable port merging and build the list again
-      if (mergeNics) {
-        for (int d = 0; d < ncclNMergedIbDevs; d++) {
-          if (ncclIbMergedDevs[d].ndevs != ncclIbMergedDevs[0].ndevs) {
-            INFO(NCCL_NET, "Detected a mix of single and multiple-port NICs. Force-disabling NCCL_IB_MERGE_NICS");
-            mergeNics = 0;
-            ncclNIbDevs = 0;
-            ncclNMergedIbDevs = 0;
-            memset(ncclIbMergedDevs, 0, sizeof(ncclIbMergedDevs));
-            goto build_ib_list;
-          }
-        }
-      }
-
       if (nIbDevs && (ncclSuccess != wrap_ibv_free_device_list(devices))) { ret = ncclInternalError; goto fail; };
     }
     if (ncclNIbDevs == 0) {
@@ -361,18 +347,7 @@ build_ib_list:
       ncclIbRelaxedOrderingEnabled = ncclIbRelaxedOrderingCapable();
       for (int d = 0; d < ncclNMergedIbDevs; d++) {
         struct ncclIbMergedDev* mergedDev = ncclIbMergedDevs + d;
-        if (mergedDev->ndevs > 1) {
-          // Print out merged dev info
-          snprintf(line+strlen(line), 2047-strlen(line), " [%d]={", d);
-          for (int i = 0; i < mergedDev->ndevs; i++) {
-            int ibDev = mergedDev->devs[i];
-            snprintf(line+strlen(line), 2047-strlen(line), "[%d] %s:%d/%s%s", ibDev, ncclIbDevs[ibDev].devName,
-              ncclIbDevs[ibDev].portNum, ncclIbDevs[ibDev].link == IBV_LINK_LAYER_INFINIBAND ? "IB" : "RoCE",
-              // Insert comma to delineate
-              i == (mergedDev->ndevs - 1) ? "" : ", ");
-          }
-          snprintf(line+strlen(line), 2047-strlen(line), "}");
-        } else {
+        {
           int ibDev = mergedDev->devs[0];
           snprintf(line+strlen(line), 2047-strlen(line), " [%d]%s:%d/%s", ibDev, ncclIbDevs[ibDev].devName,
             ncclIbDevs[ibDev].portNum, ncclIbDevs[ibDev].link == IBV_LINK_LAYER_INFINIBAND ? "IB" : "RoCE");
@@ -402,65 +377,6 @@ ncclResult_t ncclIbDevices(int* ndev) {
 // ncclSuccess : GDR works
 // ncclSystemError : no module or module loaded but not supported by GPU
 #define KNL_MODULE_LOADED(a) ((access(a, F_OK) == -1) ? 0 : 1)
-static int ncclIbGdrModuleLoaded = 0; // 1 = true, 0 = false
-static void ibGdrSupportInitOnce() {
-  // Check for the nv_peer_mem module being loaded
-  ncclIbGdrModuleLoaded = KNL_MODULE_LOADED("/sys/kernel/mm/memory_peers/nv_mem/version") ||
-                          KNL_MODULE_LOADED("/sys/kernel/mm/memory_peers/nv_mem_nc/version") ||
-                          KNL_MODULE_LOADED("/sys/module/nvidia_peermem/version");
-}
-ncclResult_t ncclIbGdrSupport() {
-  static pthread_once_t once = PTHREAD_ONCE_INIT;
-  pthread_once(&once, ibGdrSupportInitOnce);
-  if (!ncclIbGdrModuleLoaded)
-    return ncclSystemError;
-  return ncclSuccess;
-}
-
-static __thread int ibDmaSupportInitDev; // which device to init, must be thread local
-static void ibDmaBufSupportInitOnce(){
-  ncclResult_t res;
-  // select the appropriate
-  struct ncclIbMergedDev* mergedDev = ncclIbMergedDevs + ibDmaSupportInitDev;
-  // Test each real devices
-  int dev_fail = 0;
-  for (int i = 0; i < mergedDev->ndevs; i++) {
-    int ibDev = mergedDev->devs[i];
-    struct ibv_pd* pd;
-    struct ibv_context* ctx = ncclIbDevs[ibDev].context;
-    NCCLCHECKGOTO(wrap_ibv_alloc_pd(&pd, ctx), res, failure);
-    // Test kernel DMA-BUF support with a dummy call (fd=-1)
-    (void)wrap_direct_ibv_reg_dmabuf_mr(pd, 0ULL /*offset*/, 0ULL /*len*/, 0ULL /*iova*/, -1 /*fd*/, 0 /*flags*/);
-    // ibv_reg_dmabuf_mr() will fail with EOPNOTSUPP/EPROTONOSUPPORT if not supported (EBADF otherwise)
-    dev_fail |= (errno == EOPNOTSUPP) || (errno == EPROTONOSUPPORT);
-    NCCLCHECKGOTO(wrap_ibv_dealloc_pd(pd), res, failure);
-    // stop the search and goto failure
-    if (dev_fail) goto failure;
-  }
-  mergedDev->dmaBufSupported = 1;
-  return;
-failure:
-  mergedDev->dmaBufSupported = -1;
-  return;
-}
-// Detect whether DMA-BUF support is present in the kernel
-// Returns :
-// ncclSuccess : DMA-BUF support is available
-// ncclSystemError : DMA-BUF is not supported by the kernel
-ncclResult_t ncclIbDmaBufSupport(int dev) {
-  struct oncewrap {
-    pthread_once_t once = PTHREAD_ONCE_INIT;
-  };
-  static oncewrap onces[MAX_IB_DEVS];
-  // init the device only once
-  ibDmaSupportInitDev = dev;
-  pthread_once(&onces[dev].once, ibDmaBufSupportInitOnce);
-
-  int dmaBufSupported = ncclIbMergedDevs[dev].dmaBufSupported;
-  if (dmaBufSupported == 1) return ncclSuccess;
-  return ncclSystemError;
-}
-
 #define NCCL_NET_IB_MAX_RECVS 8
 
 ncclResult_t ncclIbGetProperties(int dev, ncclNetProperties_t* props) {
