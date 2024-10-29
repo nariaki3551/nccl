@@ -250,8 +250,9 @@ ncclResult_t getOpIndex(struct ncclProxyArgs* op, struct ncclProxyProgressState*
 
 ncclResult_t printProxyOp(struct ncclProxyArgs* op, int poolIndex, int opIndex) {
   printf("[%d-%d|%ld| %s", poolIndex, opIndex, op->opCount, op->pattern == ncclPatternSend ? "Send" : op->pattern == ncclPatternRecv ? "Recv" : "Coll");
-  for (int s=0; s<op->nsubs; s++) {
-    struct ncclProxySubArgs* sub = op->subs+s;
+  // for (int s=0; s<op->nsubs; s++) {
+  {
+    struct ncclProxySubArgs* sub = op->subs;
     if (op->state == ncclProxyOpProgress) {
       char status = ' ';
       if (op->pattern == ncclPatternRecv) {
@@ -376,7 +377,6 @@ static ncclResult_t ncclProxyOpToArgs(struct ncclProxyOp* op, struct ncclProxyAr
   sub->rank = op->rank;
   args->pid = op->pid;
   args->profilerContext = op->profilerContext;
-  args->nsubs = subIndex+1;
   if (subIndex) {
     if ((args->sliceSteps != op->sliceSteps) ||
         (args->chunkSteps != op->chunkSteps) ||
@@ -418,7 +418,7 @@ static ncclResult_t ProxyAppend(struct ncclProxyProgressState* state, struct ncc
 
   if (args) {
     if (shared && args->opCount == op->opCount) {
-      NCCLCHECK(ncclProxyOpToArgs(op, args, args->nsubs));
+      NCCLCHECK(ncclProxyOpToArgs(op, args, 1));
       DEBUG_PROXY_PRINT("Insert (%d/%5ld/%5ld) as group with %5ld\n", shared, args->opCount, op->opCount, OP_INDEX(args));
     } else {
       struct ncclProxyArgs* prevArgs = args;
