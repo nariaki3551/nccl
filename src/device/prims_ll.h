@@ -61,7 +61,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
   inline __device__ void waitSend(int nbytes) {
     if (sendConnHeadPtr) {
       int spins = 0;
-      while (sendConnHeadCache + NCCL_STEPS < sendConnHead + 1) {
+      while (sendConnHeadCache + 1 < sendConnHead + 1) {
         sendConnHeadCache = *sendConnHeadPtr;
         if (checkAbort(spins, 1)) break;
       }

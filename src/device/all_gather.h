@@ -98,7 +98,7 @@ struct RunWorkColl<ncclFuncAllGather, T, RedOp, NCCL_ALGO_PAT, NCCL_PROTO_SIMPLE
     Primitives<T, RedOp, FanSymmetric<1>, 0, Proto, 0> prims
       (tid, nthreads, NULL, NULL, inputBuf, outputBuf, work->redOpArg, 0*Proto::MaxGroupWidth, 0, 0, nullptr, false, false, 0, primsModePatAg);
 
-    PatAGAlgorithm<T> patAlgo(chunkCount*sizeof(T), NCCL_STEPS, channelOffset, channelOffset + channelCount, count, chunkCount, rank, nranks);
+    PatAGAlgorithm<T> patAlgo(chunkCount*sizeof(T), 1, channelOffset, channelOffset + channelCount, count, chunkCount, rank, nranks);
     int last = 0;
     while (!last) {
       int recvDim, sendDim, recvOffset, sendOffset, recvStepOffset, postRecv, postSend, nelem;

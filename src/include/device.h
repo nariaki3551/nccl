@@ -22,7 +22,6 @@ extern const char* ncclProtoStr[NCCL_NUM_PROTOCOLS];
 
 #define NCCL_MAX_OPS 2048
 // #define NCCL_STEPS 8
-#define NCCL_STEPS 1
 
 #ifdef __CUDA_ARCH__
   #define NCCL_CUDA_ARCH __CUDA_ARCH__
@@ -79,8 +78,6 @@ union ncclLLFifoLine {
 #define NCCL_LL_CLEAN_MASK 0x7ffffff8
 #define NCCL_LL_FLAG(a) ((uint32_t)(a))
 #endif
-// Make sure the clean mask will last for at least NCCL_NSTEPS
-static_assert(NCCL_LL_CLEAN_MASK % NCCL_STEPS == 0, "Invalid NCCL_LL_CLEAN_MASK value");
 
 #define NCCL_LL128_LINESIZE 128
 #define NCCL_LL128_LINEELEMS (NCCL_LL128_LINESIZE/sizeof(uint64_t))

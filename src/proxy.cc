@@ -256,14 +256,14 @@ ncclResult_t printProxyOp(struct ncclProxyArgs* op, int poolIndex, int opIndex) 
     if (op->state == ncclProxyOpProgress) {
       char status = ' ';
       if (op->pattern == ncclPatternRecv) {
-        if (sub->posted < sub->nsteps && sub->posted < sub->done + NCCL_STEPS) status = 'I'; // Init
+        if (sub->posted < sub->nsteps && sub->posted < sub->done + 1) status = 'I'; // Init
         else if (sub->received < sub->posted) status = 'R'; // Receiving
         else if (sub->received < sub->transmitted) status = 'R'; // Receiving
         else if (sub->transmitted < sub->received) status = 'F'; // Flushing
         else if (sub->done < sub->transmitted) status = 'G'; // Waiting on GPU
         else status = 'D'; // Done
       } else if (op->pattern == ncclPatternSend) {
-        if (sub->posted < sub->nsteps && sub->posted < sub->done + NCCL_STEPS) status = 'I'; // Init
+        if (sub->posted < sub->nsteps && sub->posted < sub->done + 1) status = 'I'; // Init
         else if (sub->transmitted < sub->posted) status = 'G'; // Waiting on GPU
         else if (sub->done < sub->transmitted) status = 'S'; // Sending
         else status = 'D'; // Done
@@ -587,7 +587,7 @@ ncclResult_t ncclProxySaveOp(struct ncclComm* comm, struct ncclProxyOp* op, bool
       NCCLCHECK(ncclCalloc(&nstepsSend, log2Up(nranks)));
       NCCLCHECK(ncclCalloc(&nstepsRecv, log2Up(nranks)));
       const ssize_t size = op->nbytes/comm->nRanks;
-      PatRSAlgorithm<char> algo(op->chunkSize, NCCL_STEPS, 0, size, size, op->chunkSize, rank, nranks);
+      PatRSAlgorithm<char> algo(op->chunkSize, 1, 0, size, size, op->chunkSize, rank, nranks);
       int last = 0;
       while (last == 0) {
         int recvDim, sendDim, recvOffset, sendOffset, sendStepOffset, postRecv, postSend, nelem;
@@ -616,7 +616,7 @@ ncclResult_t ncclProxySaveOp(struct ncclComm* comm, struct ncclProxyOp* op, bool
       NCCLCHECK(ncclCalloc(&nstepsSend, log2Up(nranks)));
       NCCLCHECK(ncclCalloc(&nstepsRecv, log2Up(nranks)));
       const ssize_t size = op->nbytes/comm->nRanks;
-      PatAGAlgorithm<char> algo(op->chunkSize, NCCL_STEPS, 0, size, size, op->chunkSize, rank, nranks);
+      PatAGAlgorithm<char> algo(op->chunkSize, 1, 0, size, size, op->chunkSize, rank, nranks);
       int last = 0;
       while (last == 0) {
         int recvDim, sendDim, recvOffset, sendOffset, recvStepOffset, postRecv, postSend, nelem;

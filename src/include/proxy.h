@@ -114,17 +114,17 @@ struct ncclProxySubArgs {
   uint64_t transmitted;
   uint64_t done;
   uint64_t end;
-  void* requests[NCCL_STEPS];
+  void* requests[1];
 
   // Profiler plugin
   int eActivationMask;
   int rank;
   void* taskEventHandle;
   void* opEventHandle;
-  void* stepEventHandles[NCCL_STEPS];
+  void* stepEventHandles[1];
   size_t transSize;
 
-  void* recvRequestsCache[NCCL_STEPS];
+  void* recvRequestsCache[1];
   int recvRequestsSubCount;
 };
 
@@ -147,8 +147,8 @@ struct ncclProxyArgs {
   uint8_t /*ncclFunc_t*/ coll;
   uint8_t protocol;
   int state;
-  char* sharedBuff[NCCL_STEPS];
-  int sharedSize[NCCL_STEPS];
+  char* sharedBuff[1];
+  int sharedSize[1];
 
   int idle;
 

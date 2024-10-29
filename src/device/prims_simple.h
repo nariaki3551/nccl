@@ -126,10 +126,10 @@ class Primitives<
     if (((flags & (Recv*RoleWaitRecv)) && !noRecvWait) ||
         ((flags & (Send*RoleWaitSend)) && !noSendWait)) {
       int spins = 0;
-      while (connStepCache + (isSendNotRecv ? NCCL_STEPS : 0) < step + StepPerSlice) {
+      while (connStepCache + (isSendNotRecv ? 1 : 0) < step + StepPerSlice) {
         connStepCache = loadStepValue(connStepPtr);
         if (checkAbort(spins)) break;
-        //if (spins == 0) printf("r=%d b=%d t=%d SPUN OUT got=%d want=%d\n", ncclShmem.comm.rank, blockIdx.x, threadIdx.x, int(connStepCache + (isSendNotRecv ? NCCL_STEPS : 0)), int(step+StepPerSlice));
+        //if (spins == 0) printf("r=%d b=%d t=%d SPUN OUT got=%d want=%d\n", ncclShmem.comm.rank, blockIdx.x, threadIdx.x, int(connStepCache + (isSendNotRecv ? 1 : 0)), int(step+StepPerSlice));
       }
     }
 
@@ -336,7 +336,7 @@ public:
         if (flags & (Recv*RoleWaitRecv | Send*RoleWaitSend)) {
           const bool isSendNotRecv = (Send && Recv) ? (flags & RoleWaitSend) : Send;
           int spins = 0;
-          while (connStepCache + (isSendNotRecv ? NCCL_STEPS : 0) < step + StepPerSlice) {
+          while (connStepCache + (isSendNotRecv ? 1 : 0) < step + StepPerSlice) {
             connStepCache = loadStepValue(connStepPtr);
             if (checkAbort(spins)) break;
           }
@@ -909,7 +909,7 @@ private:
     }
     if (sendPow2 >= 0 && sendPow2 == index && (flags & RoleWaitSend)) {
       int spins = 0;
-      while (connStepCache + NCCL_STEPS < step + sendStepOffset + StepPerSlice) {
+      while (connStepCache + 1 < step + sendStepOffset + StepPerSlice) {
         connStepCache = loadStepValue(connStepPtr);
         if (checkAbort(spins)) break;
       }
@@ -976,7 +976,7 @@ private:
     }
     if (sendPow2 >= 0 && sendPow2 == index && (flags & RoleWaitSend)) {
       int spins = 0;
-      while (connStepCache + NCCL_STEPS < step + StepPerSlice) {
+      while (connStepCache + 1 < step + StepPerSlice) {
         connStepCache = loadStepValue(connStepPtr);
         if (checkAbort(spins)) break;
       }
