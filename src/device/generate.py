@@ -153,12 +153,12 @@ def best_kernel(coll, redop, ty, algo, proto):
 
 # Order rows are enumerated must match formula of `ncclDevFuncId()`:
 def enumerate_func_rows():
-  for coll in ("AllGather", "Broadcast"):
+  for coll in ("AllGather", ):
     algos = algos_of_coll[coll]
     for algo in algos:
       for proto in all_protos:
         yield (coll, None, None, algo, proto)
-  for coll in ("AllReduce", "ReduceScatter"):
+  for coll in ("ReduceScatter", ):
     algos = algos_of_coll[coll]
     for redop in all_redops:
       for ty in all_tys:
