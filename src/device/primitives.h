@@ -32,7 +32,7 @@ struct ProtoSimple {
 
   // Data bytes (no flags etc) in one step of the fifo queue.
   __device__ static int calcBytePerStep() {
-    return ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS;
+    return ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE];
   }
   // Granularity of data bytes transferred per thread.
   __device__ static int calcBytePerGrain() {
@@ -47,7 +47,7 @@ struct ProtoLL {
 
   // Data bytes (no flags etc) in one step of the fifo queue.
   __device__ static int calcBytePerStep() {
-    return ncclShmem.comm.buffSizes[NCCL_PROTO_LL]/NCCL_STEPS/2; // Half is data
+    return ncclShmem.comm.buffSizes[NCCL_PROTO_LL]/2; // Half is data
   }
   // Granularity of data bytes transferred per thread.
   __device__ static int calcBytePerGrain() {
@@ -62,7 +62,7 @@ struct ProtoLL128 {
 
   // Data bytes (no flags etc) in one step of the fifo queue.
   __device__ static int calcBytePerStep() {
-    return (ncclShmem.comm.buffSizes[NCCL_PROTO_LL128]/NCCL_STEPS)*NCCL_LL128_DATAELEMS/NCCL_LL128_LINEELEMS;
+    return (ncclShmem.comm.buffSizes[NCCL_PROTO_LL128])*NCCL_LL128_DATAELEMS/NCCL_LL128_LINEELEMS;
   }
   // Granularity of data bytes transferred per thread.
   __device__ static int calcBytePerGrain() {

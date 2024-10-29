@@ -578,7 +578,7 @@ private:
       bool ipcReg = false, bool netReg = false, int stepSize_ = 0, int mode = primsModeDefault
     ):
     tid(tid), nthreads(nthreads), tidInBlock(threadIdx.x), group(group),
-    stepSize(stepSize_ == 0 ? ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS/sizeof(T) : stepSize_) {
+    stepSize(stepSize_ == 0 ? ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/sizeof(T) : stepSize_) {
 
     // For send operations, we need an extra warp to overlap the threadfence and the copy
     this->nworkers = nthreads - (MaxSend > 0 && nthreads >= NCCL_SIMPLE_EXTRA_GROUP_IF_NTHREADS_GE ? WARP_SIZE : 0);

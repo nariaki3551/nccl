@@ -341,7 +341,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
     ):
     redOp(redOpArg),
     tid(tid), nthreads(nthreads), wid(tid%WARP_SIZE), group(group),
-    stepLines(ncclShmem.comm.buffSizes[NCCL_PROTO_LL]/NCCL_STEPS/sizeof(ncclLLFifoLine)) {
+    stepLines(ncclShmem.comm.buffSizes[NCCL_PROTO_LL]/sizeof(ncclLLFifoLine)) {
     auto *channel = &ncclShmem.channel;
     // If we are going to support oneshot collNet + LL, then we would need to add connector index here
     int nrecv=0, nsend=0;

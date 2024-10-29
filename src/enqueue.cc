@@ -1377,7 +1377,7 @@ static ncclResult_t calcCollChunking(
     return ncclInternalError;
   }
 
-  int stepSize   = comm->buffSizes[info->protocol]/NCCL_STEPS;
+  int stepSize   = comm->buffSizes[info->protocol];
   int chunkSteps = (info->protocol == NCCL_PROTO_SIMPLE && info->algorithm == NCCL_ALGO_RING) ? info->chunkSteps : 1;
   int sliceSteps = (info->protocol == NCCL_PROTO_SIMPLE && info->algorithm == NCCL_ALGO_RING) ? info->sliceSteps : 1;
   int chunkSize = stepSize*chunkSteps;

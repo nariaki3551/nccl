@@ -605,7 +605,7 @@ static int calcRegionOffset(
     int side // 0=begin, 1=end
   ) {
   struct ncclCollNetSharedRes* collNet = args->subs[0].connection->collNet;
-  int slotSize = collNet->buffSize/NCCL_STEPS;
+  int slotSize = collNet->buffSize;
   int chunkSize = args->chunkSize;
   int base = isRecvNotSend*NCCL_STEPS + (step%NCCL_STEPS);
   base *= collNet->nChannels*slotSize;

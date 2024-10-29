@@ -613,7 +613,7 @@ static ncclResult_t computeBuffSizes(struct ncclComm* comm) {
   else comm->p2pChunkSize = ncclParamP2pPciChunkSize();
 
   // Make sure P2P chunksize is not larger than coll chunksize.
-  if (comm->p2pChunkSize * NCCL_STEPS > comm->buffSizes[NCCL_PROTO_SIMPLE]) comm->p2pChunkSize = comm->buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS;
+  if (comm->p2pChunkSize * NCCL_STEPS > comm->buffSizes[NCCL_PROTO_SIMPLE]) comm->p2pChunkSize = comm->buffSizes[NCCL_PROTO_SIMPLE];
 
   if (comm->sharedRes->owner != comm) {
     /* make sure split comm p2pChunkSize won't exceed shared p2pChunkSize. */
