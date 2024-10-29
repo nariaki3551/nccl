@@ -640,14 +640,6 @@ static int calcRegionOffset(
   }
 }
 
-#define LAST_OF_GROUP(args, s) \
-  ((s)%COLLNET_GROUP_NSUBS == COLLNET_GROUP_NSUBS-1 || s == 0)
-
-static constexpr int calcStepsPerGroup(int nGroups) {
-  //return NCCL_STEPS/nGroups;
-  return NCCL_STEPS;
-}
-
 static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct ncclProxyArgs* args) {
   if (args->state == ncclProxyOpReady) {
     // for (int s=0; s<args->nsubs; s++) {
@@ -664,7 +656,6 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
   args->idle = 1;
   if (args->state == ncclProxyOpProgress) {
     int p = NCCL_PROTO_SIMPLE;
-    int nGroups = DIVUP(1, COLLNET_GROUP_NSUBS);
     // for (int s=0; s<args->nsubs; s++) {
     {
       struct ncclProxySubArgs* sub = args->subs;
@@ -688,7 +679,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
         *sendHead = sub->base + sub->posted - NCCL_STEPS;
         if (resources->gdcSync) wc_store_fence(); // Flush out WC write
       }
-      if (sub->received < sub->posted && sub->received < sub->done + calcStepsPerGroup(nGroups)) {
+      if (sub->received < sub->posted && sub->received < sub->done + NCCL_STEPS) {
         int buffSlot = (sub->base+sub->received)%NCCL_STEPS;
         volatile struct ncclConnFifo* connFifo = (volatile struct ncclConnFifo*)resources->recvMem->connFifo;
         volatile uint64_t* recvTail = &resources->recvMem->tail;
@@ -865,7 +856,6 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
   args->idle = 1;
   if (args->state == ncclProxyOpProgress) {
     int p = NCCL_PROTO_SIMPLE;
-    int nGroups = DIVUP(1, COLLNET_GROUP_NSUBS);
     // for (int s=0; s<args->nsubs; s++) {
     {
       int group = 0;
@@ -877,7 +867,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
       char* region = NCCL_NET_MAP_GET_POINTER(&resources->map, cpu, buffs[p]);
 
       // Enforce sync between operations of the same group.
-      if ((sub->posted < sub->done + calcStepsPerGroup(nGroups)) && (sub->posted < sub->nsteps)) {
+      if ((sub->posted < sub->done + NCCL_STEPS) && (sub->posted < sub->nsteps)) {
         int buffSlot = (sub->base+sub->posted)%NCCL_STEPS;
         reqFifo[group][buffSlot].turnIsSendNotRecv = true;
         TRACE(NCCL_NET, "recvProxy [%ld/%d/%d] posted buffer", (long)sub->posted, group, buffSlot);

@@ -377,22 +377,6 @@ static ncclResult_t ncclProxyOpToArgs(struct ncclProxyOp* op, struct ncclProxyAr
   sub->rank = op->rank;
   args->pid = op->pid;
   args->profilerContext = op->profilerContext;
-  if (subIndex) {
-    if ((args->sliceSteps != op->sliceSteps) ||
-        (args->chunkSteps != op->chunkSteps) ||
-        (args->protocol != op->protocol) ||
-        (args->dtype != op->dtype) ||
-        (args->redOp != op->redOp) ||
-        (args->coll != op->coll)) {
-      WARN("Proxy append mismatch");
-      return ncclInternalError;
-    }
-    if (args->state != ncclProxyOpReady) {
-      WARN("Proxy append on running operation");
-      return ncclInternalError;
-    }
-    return ncclSuccess;
-  }
   //memset(&args->progress, 0, sizeof(struct ncclProxyArgs)-offsetof(struct ncclProxyArgs, progress));
   args->done = 0;
   args->opCount = op->opCount;
