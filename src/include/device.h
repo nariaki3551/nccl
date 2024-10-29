@@ -21,7 +21,8 @@ extern const char* ncclAlgoStr[NCCL_NUM_ALGORITHMS];
 extern const char* ncclProtoStr[NCCL_NUM_PROTOCOLS];
 
 #define NCCL_MAX_OPS 2048
-#define NCCL_STEPS 8
+// #define NCCL_STEPS 8
+#define NCCL_STEPS 1
 
 #ifdef __CUDA_ARCH__
   #define NCCL_CUDA_ARCH __CUDA_ARCH__
