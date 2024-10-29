@@ -60,25 +60,11 @@ static uint64_t hashUniqueId(ncclUniqueId const &id) {
   return h;
 }
 
-// GDRCOPY support: Off by default
-NCCL_PARAM(GdrCopyEnable, "GDRCOPY_ENABLE", 0);
-
-// GDRCOPY support
-gdr_t ncclGdrCopy = NULL;
-
-ncclResult_t initGdrCopy() {
-  if (ncclParamGdrCopyEnable() == 1) {
-    ncclGdrCopy = ncclGdrInit();
-  }
-  return ncclSuccess;
-}
-
 static ncclResult_t initResult = ncclSuccess;
 static pthread_once_t initOnceControl = PTHREAD_ONCE_INIT;
 
 static void initOnceFunc() {
   initEnv();
-  initGdrCopy();
   // Always initialize bootstrap network
   NCCLCHECKGOTO(bootstrapNetInit(), initResult, exit);
 exit:;
@@ -463,11 +449,6 @@ static ncclResult_t devCommSetup(ncclComm_t comm) {
     INFO(NCCL_INIT, "CC %s, Multi-GPU CC %s, workFifoBytes %d", ccStatus.CCEnabled ? "On" : "Off", ccStatus.multiGpuCCEnabled ? "On" : "Off", comm->workFifoBytes);
   }
 
-  // if (ncclGdrCopy != NULL && ncclParamGdrCopyFifoEnable() == 1) {
-  //   // The workFifoBuf lives in GDR mapped CUDA memory.
-  //   NCCLCHECKGOTO(ncclGdrCudaCalloc(&comm->workFifoBuf, &comm->workFifoBufDev, comm->workFifoBytes, &comm->workFifoBufGdrHandle), ret, fail);
-  //   ncclCommPushCudaGdrFree(comm, comm->workFifoBufGdrHandle);
-  // } else
   {
     // The workFifoBuf lives in cudaHost memory.
     comm->workFifoBufGdrHandle = nullptr;

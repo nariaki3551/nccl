@@ -555,7 +555,6 @@ static ncclResult_t sendProxyFree(struct ncclProxyConnection* connection, struct
     struct connectMapMem* mems = resources->map.mems;
     NCCLCHECK(ncclCudaHostFree(mems[NCCL_NET_MAP_HOSTMEM].cpuPtr));
     NCCLCHECK(ncclCudaFree(mems[NCCL_NET_MAP_DEVMEM].cpuPtr));
-    if (mems[NCCL_NET_MAP_GDCMEM].cpuPtr) NCCLCHECK(ncclGdrCudaFree(resources->gdrDesc));
     NCCLCHECK(sharedBuffersDestroy(connection->collNet));
     NCCLCHECK(sharedFree(proxyState, connection->collNet, resources->netDev));
     if (ncclAtomicRefCountDecrement(&connection->collNet->refCount) == 0) free(connection->collNet);
@@ -576,7 +575,6 @@ static ncclResult_t recvProxyFree(struct ncclProxyConnection* connection, struct
     struct connectMapMem* mems = resources->map.mems;
     NCCLCHECK(ncclCudaHostFree(mems[NCCL_NET_MAP_HOSTMEM].cpuPtr));
     NCCLCHECK(ncclCudaFree(mems[NCCL_NET_MAP_DEVMEM].cpuPtr));
-    if (mems[NCCL_NET_MAP_GDCMEM].cpuPtr) NCCLCHECK(ncclGdrCudaFree(resources->gdrDesc));
     NCCLCHECK(sharedBuffersDestroy(connection->collNet));
     NCCLCHECK(sharedFree(proxyState, connection->collNet, resources->netDev));
     if (ncclAtomicRefCountDecrement(&connection->collNet->refCount) == 0) free(connection->collNet);
