@@ -71,9 +71,9 @@ int main(int argc, char** argv) {
     int rank, device, nranks = 2;
     setup(&rank, &device);
     // Initialize CUDA
-    cudaStream_t stream_ag, stream_rs;
-    cudaStreamCreateWithFlags(&stream_ag, cudaStreamNonBlocking);
-    cudaStreamCreateWithFlags(&stream_rs, cudaStreamNonBlocking);
+    // cudaStream_t stream_ag, stream_rs;
+    // cudaStreamCreateWithFlags(&stream_ag, cudaStreamNonBlocking);
+    // cudaStreamCreateWithFlags(&stream_rs, cudaStreamNonBlocking);
     cudaSetDevice(device);
 
     // Initialize NCCL communicator
@@ -92,13 +92,11 @@ int main(int argc, char** argv) {
     cudaMalloc(&sendbuff_rs, count * sizeof(nccl_dtype));
     cudaMalloc(&recvbuff_rs, count * nranks * sizeof(nccl_dtype));
 
-    ncclGroupStart();
-    ncclAllGather(sendbuff_ag, recvbuff_ag, count, nccl_dtype, comm, stream_ag);
-    ncclReduceScatter(sendbuff_rs, recvbuff_rs, count, nccl_dtype, ncclSum, comm, stream_rs);
-    ncclGroupEnd();
+    ncclAllGather(sendbuff_ag, recvbuff_ag, count, nccl_dtype, comm, NULL);
+    ncclReduceScatter(sendbuff_rs, recvbuff_rs, count, nccl_dtype, ncclSum, comm, NULL);
 
-    cudaStreamSynchronize(stream_ag);
-    cudaStreamSynchronize(stream_rs);
+    cudaStreamSynchronize(NULL);
+    // cudaStreamSynchronize(stream_rs);
 
     ncclCommDestroy(comm);
 
@@ -106,8 +104,8 @@ int main(int argc, char** argv) {
     cudaFree(recvbuff_ag);
     cudaFree(sendbuff_rs);
     cudaFree(recvbuff_rs);
-    cudaStreamDestroy(stream_ag);
-    cudaStreamDestroy(stream_rs);
+    // cudaStreamDestroy(stream_ag);
+    // cudaStreamDestroy(stream_rs);
 
     printf("Rank %d: Test finished successfully!\n", rank);
     return 0;
