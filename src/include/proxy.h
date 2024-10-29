@@ -10,7 +10,6 @@
 #include "device.h"
 #include "info.h"
 #include "socket.h"
-#include "ipcsocket.h"
 #include "nccl_net.h"
 #include <pthread.h>
 #include "shmutils.h"
@@ -291,7 +290,6 @@ struct ncclProxyState {
   pthread_t thread;
   pthread_t threadUDS;
   struct ncclSocket* listenSock;
-  struct ncclIpcSocket ipcSock;
   int stop;
   CUcontext cudaCtx;
   ncclResult_t asyncResult;
@@ -301,7 +299,6 @@ struct ncclProxyState {
   struct ncclSocket* peerSocks;
   struct ncclProxyOps* proxyOps;
   void** sharedDevMems;
-  struct ncclIpcSocket peerIpcSock; // cuMEM API support (UDS)
   uint64_t *peerAddressesUDS; // cuMem API support (UDS)
 
   // Progress thread
