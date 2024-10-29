@@ -153,7 +153,6 @@ def best_kernel(coll, redop, ty, algo, proto):
 
 # Order rows are enumerated must match formula of `ncclDevFuncId()`:
 def enumerate_func_rows():
-  yield ("SendRecv", None, None, None, None)
   for coll in ("AllGather", "Broadcast"):
     algos = algos_of_coll[coll]
     for algo in algos:

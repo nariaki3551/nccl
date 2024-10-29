@@ -526,9 +526,6 @@ inline int ncclDevFuncId(int coll, int devRedOp, int type, int algo, int proto) 
   int row;
   do {
     row = 0; // ncclDevFuncIndex_P2p
-    if (coll == ncclFuncSendRecv) break;
-    row += 1;
-
     int nAlgos = 4;
     if (coll == ncclFuncAllGather) {
       int algo1 = algo == NCCL_ALGO_RING ? 0 :
