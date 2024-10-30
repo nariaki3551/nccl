@@ -17,59 +17,6 @@
 #include <pthread.h>
 #include <pwd.h>
 
-const char* userHomeDir() {
-  struct passwd *pwUser = getpwuid(getuid());
-  return pwUser == NULL ? NULL : pwUser->pw_dir;
-}
-
-void setEnvFile(const char* fileName) {
-  FILE * file = fopen(fileName, "r");
-  if (file == NULL) return;
-
-  char *line = NULL;
-  char envVar[1024];
-  char envValue[1024];
-  size_t n = 0;
-  ssize_t read;
-  while ((read = getline(&line, &n, file)) != -1) {
-    if (line[read-1] == '\n') line[read-1] = '\0';
-    int s=0; // Env Var Size
-    while (line[s] != '\0' && line[s] != '=') s++;
-    if (line[s] == '\0') continue;
-    strncpy(envVar, line, std::min(1023,s));
-    envVar[std::min(1023,s)] = '\0';
-    s++;
-    strncpy(envValue, line+s, 1023);
-    envValue[1023]='\0';
-    setenv(envVar, envValue, 0);
-    //printf("%s : %s->%s\n", fileName, envVar, envValue);
-  }
-  if (line) free(line);
-  fclose(file);
-}
-
-static void initEnvFunc() {
-  char confFilePath[1024];
-  const char* userFile = getenv("NCCL_CONF_FILE");
-  if (userFile && strlen(userFile) > 0) {
-    snprintf(confFilePath, sizeof(confFilePath), "%s", userFile);
-    setEnvFile(confFilePath);
-  } else {
-    const char* userDir = userHomeDir();
-    if (userDir) {
-      snprintf(confFilePath, sizeof(confFilePath), "%s/.nccl.conf", userDir);
-      setEnvFile(confFilePath);
-    }
-  }
-  snprintf(confFilePath, sizeof(confFilePath), "/etc/nccl.conf");
-  setEnvFile(confFilePath);
-}
-
-void initEnv() {
-  static pthread_once_t once = PTHREAD_ONCE_INIT;
-  pthread_once(&once, initEnvFunc);
-}
-
 void ncclLoadParam(char const* env, int64_t deftVal, int64_t uninitialized, int64_t* cache) {
   static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   pthread_mutex_lock(&mutex);
@@ -92,6 +39,5 @@ void ncclLoadParam(char const* env, int64_t deftVal, int64_t uninitialized, int6
 }
 
 const char* ncclGetEnv(const char* name) {
-  initEnv();
   return getenv(name);
 }
