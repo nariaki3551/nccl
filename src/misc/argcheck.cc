@@ -7,24 +7,6 @@
 #include "argcheck.h"
 #include "comm.h"
 
-ncclResult_t CudaPtrCheck(const void* pointer, struct ncclComm* comm, const char* ptrname, const char* opname) {
-  cudaPointerAttributes attr;
-  cudaError_t err = cudaPointerGetAttributes(&attr, pointer);
-  if (err != cudaSuccess || attr.devicePointer == NULL) {
-    WARN("%s : %s %p is not a valid pointer", opname, ptrname, pointer);
-    return ncclInvalidArgument;
-  }
-#if CUDART_VERSION >= 10000
-  if (attr.type == cudaMemoryTypeDevice && attr.device != comm->cudaDev) {
-#else
-  if (attr.memoryType == cudaMemoryTypeDevice && attr.device != comm->cudaDev) {
-#endif
-    WARN("%s : %s allocated on device %d mismatchs with NCCL device %d", opname, ptrname, attr.device, comm->cudaDev);
-    return ncclInvalidArgument;
-  }
-  return ncclSuccess;
-}
-
 ncclResult_t PtrCheck(void* ptr, const char* opname, const char* ptrname) {
   if (ptr == NULL) {
     WARN("%s : %s argument is NULL", opname, ptrname);
@@ -68,19 +50,5 @@ ncclResult_t ArgsCheck(struct ncclInfo* info) {
     return ncclInvalidArgument;
   }
 
-  if (info->comm->checkPointers) {
-    if ((info->coll == ncclFuncSend || info->coll == ncclFuncRecv)) {
-      if (info->count >0)
-        NCCLCHECK(CudaPtrCheck(info->recvbuff, info->comm, "buff", info->opName));
-    } else {
-      // Check CUDA device pointers
-      if (info->coll != ncclFuncBroadcast || info->comm->rank == info->root) {
-        NCCLCHECK(CudaPtrCheck(info->sendbuff, info->comm, "sendbuff", info->opName));
-      }
-      if (info->coll != ncclFuncReduce || info->comm->rank == info->root) {
-        NCCLCHECK(CudaPtrCheck(info->recvbuff, info->comm, "recvbuff", info->opName));
-      }
-    }
-  }
   return ncclSuccess;
 }
