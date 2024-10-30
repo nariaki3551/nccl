@@ -9,7 +9,6 @@
 
 #include <stdint.h>
 
-const char* userHomeDir();
 void setEnvFile(const char* fileName);
 const char *ncclGetEnv(const char *name);
 

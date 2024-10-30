@@ -21,18 +21,7 @@ void ncclLoadParam(char const* env, int64_t deftVal, int64_t uninitialized, int6
   static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   pthread_mutex_lock(&mutex);
   if (__atomic_load_n(cache, __ATOMIC_RELAXED) == uninitialized) {
-    const char* str = ncclGetEnv(env);
     int64_t value = deftVal;
-    if (str && strlen(str) > 0) {
-      errno = 0;
-      value = strtoll(str, nullptr, 0);
-      if (errno) {
-        value = deftVal;
-        INFO(NCCL_ALL,"Invalid value %s for %s, using default %lld.", str, env, (long long)deftVal);
-      } else {
-        INFO(NCCL_ENV,"%s set by environment to %lld.", env, (long long)value);
-      }
-    }
     __atomic_store_n(cache, value, __ATOMIC_RELAXED);
   }
   pthread_mutex_unlock(&mutex);
