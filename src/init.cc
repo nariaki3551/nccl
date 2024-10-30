@@ -375,8 +375,6 @@ static ncclResult_t commAlloc(struct ncclComm* comm, struct ncclComm* parent, in
 
   //  setup intraComm0 and intraRanks 0 to default values to ensure proper cleanup of the communicator
   comm->intraComm0 = comm;
-  comm->intraRank = 0;
-  comm->intraRanks = 1;
 
   return ncclSuccess;
 }
@@ -631,17 +629,17 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   int *topParentLocalRanks = NULL;
 
   // AllGather1 - begin
-  NCCLCHECKGOTO(ncclCalloc(&comm->peerInfo, nranks+1), ret, fail); // Extra rank to represent CollNet root
+  NCCLCHECKGOTO(ncclCalloc(&comm->peerInfo, 2+1), ret, fail); // Extra rank to represent CollNet root
   NCCLCHECKGOTO(fillInfo(comm, comm->peerInfo+rank, comm->commHash), ret, fail);
   NCCLCHECKGOTO(bootstrapAllGather(comm->bootstrap, comm->peerInfo, sizeof(struct ncclPeerInfo)), ret, fail);
 
   do {
     // Compute intra-process ranks
     int intraProcRank0 = -1, intraProcRank = -1, intraProcRanks = 0;
-    for (int i = 0; i < nranks; i++) comm->minCompCap = std::min(comm->minCompCap, comm->peerInfo[i].cudaCompCap);
-    for (int i = 0; i < nranks; i++) comm->maxCompCap = std::max(comm->maxCompCap, comm->peerInfo[i].cudaCompCap);
+    for (int i = 0; i < 2; i++) comm->minCompCap = std::min(comm->minCompCap, comm->peerInfo[i].cudaCompCap);
+    for (int i = 0; i < 2; i++) comm->maxCompCap = std::max(comm->maxCompCap, comm->peerInfo[i].cudaCompCap);
 
-    for (int i = 0; i < nranks; i++) {
+    for (int i = 0; i < 2; i++) {
       if ((comm->peerInfo[i].hostHash == comm->peerInfo[rank].hostHash)
           && (comm->peerInfo[i].pidHash == comm->peerInfo[rank].pidHash)) {
         // Rank is in same process
@@ -659,20 +657,8 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     // Buffer Registration is not supported with MNNVL
     // if (comm->MNNVL) comm->nvlsRegSupport = 0;
 
-    TRACE(NCCL_INIT,"pidHash[%d] %lx intraProcRank %d intraProcRanks %d intraProcRank0 %d",
-        rank, comm->peerInfo[rank].pidHash, intraProcRank, intraProcRanks, intraProcRank0);
-    if (intraProcRank == -1 || intraProcRank0 == -1 || comm->peerInfo[intraProcRank0].comm == NULL) {
-      WARN("Failed to determine intra proc ranks rank %d hostHash %lx pidHash %lx intraProcRank %d intraProcRanks %d intraProcRank0 %d",
-          rank, comm->peerInfo[rank].hostHash, comm->peerInfo[rank].pidHash,
-          intraProcRank, intraProcRanks, intraProcRank0);
-      ret = ncclInternalError;
-      goto fail;
-    }
     struct ncclComm* comm0 = comm->peerInfo[intraProcRank0].comm;
-    assert(intraProcRank==0 ? comm==comm0 : true);
     comm->intraComm0 = comm0;
-    comm->intraRank = intraProcRank;
-    comm->intraRanks = intraProcRanks;
     comm->intraBarrierPhase = 0;
     comm->intraBarrierCounter = 0;
     comm->intraBarrierGate = 0;
@@ -764,7 +750,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   }
 
   // AllGather3 - begin
-  NCCLCHECKGOTO(ncclCalloc(&allGather3Data, nranks), ret, fail);
+  NCCLCHECKGOTO(ncclCalloc(&allGather3Data, 2), ret, fail);
 
   for (int a=0; a<NCCL_NUM_ALGORITHMS; a++) {
     allGather3Data[rank].graphInfo[a].pattern = graphs[a]->pattern;
@@ -786,10 +772,10 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   NCCLCHECKGOTO(bootstrapAllGather(comm->bootstrap, allGather3Data, sizeof(*allGather3Data)), ret, fail);
 
   // Determine nNodes, firstRanks, ...
-  NCCLCHECKGOTO(ncclCalloc(&nodesFirstRank, nranks), ret, fail);
-  NCCLCHECKGOTO(ncclCalloc(&nodesTreePatterns, nranks), ret, fail);
+  NCCLCHECKGOTO(ncclCalloc(&nodesFirstRank, 2), ret, fail);
+  NCCLCHECKGOTO(ncclCalloc(&nodesTreePatterns, 2), ret, fail);
   NCCLCHECKGOTO(ncclCalloc(&comm->rankToNode, comm->nRanks), ret, fail);
-  for (int r=0; r<nranks; r++) {
+  for (int r=0; r<2; r++) {
     int node;
     int firstRank = allGather3Data[r].topoRanks.ringRecv[0];
     for (node=0; node<comm->nNodes && nodesFirstRank[node] != firstRank; node++);
@@ -856,12 +842,12 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     goto fail;
   }
 
-  INFO(NCCL_INIT, "comm %p rank %d nRanks %d nNodes %d localRanks %d localRank %d MNNVL %d",
-       comm, rank, comm->nRanks, comm->nNodes, comm->localRanks, comm->localRank, comm->MNNVL);
+  INFO(NCCL_INIT, "comm %p rank %d nranks %d nNodes %d localRanks %d localRank %d MNNVL %d",
+       comm, rank, 2, comm->nNodes, comm->localRanks, comm->localRank, comm->MNNVL);
 
   nChannelsOrig = comm->nChannels;
   NCCLCHECKGOTO(ncclCalloc(&allTopoRanks, comm->nRanks), ret, fail);
-  for (int i=0; i<nranks; i++) {
+  for (int i=0; i<2; i++) {
     allTopoRanks[i] = &allGather3Data[i].topoRanks;
     // Make sure we align all ranks so that the tuning is consistent across ranks
     for (int a=0; a<NCCL_NUM_ALGORITHMS; a++) {
@@ -895,11 +881,11 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     comm->collNetRegSupport = (comm->maxLocalRanks == 1);
   }
 
-  NCCLCHECKGOTO(ncclCalloc(&rings, nranks*MAXCHANNELS), ret, fail);
+  NCCLCHECKGOTO(ncclCalloc(&rings, 2*MAXCHANNELS), ret, fail);
   NCCLCHECKGOTO(ncclTopoPostset(comm, nodesFirstRank, nodesTreePatterns, allTopoRanks, rings, graphs, parent), ret, fail);
   // AllGather3 - end
 
-  TRACE(NCCL_INIT, "rank %d nranks %d - BUILT %d TREES/RINGS", rank, nranks, comm->nChannels);
+  TRACE(NCCL_INIT, "rank %d nranks %d - BUILT %d TREES/RINGS", rank, 2, comm->nChannels);
 
   char line[1024];
   line[0]='\0';
@@ -1018,7 +1004,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
 
   INFO(NCCL_INIT, "%d coll channels, %d collnet channels, %d nvls channels, %d p2p channels", comm->nChannels, comm->nChannels, -1, comm->p2pnChannels);
 
-  if (comm->intraRank == 0) { // Load ncclParamLaunchMode
+  { // Load ncclParamLaunchMode
     const char* str = ncclGetEnv("NCCL_LAUNCH_MODE");
     enum ncclLaunchMode mode, modeOld;
     if (str && strcasecmp(str, "GROUP") == 0) {
@@ -1368,18 +1354,6 @@ fail:
   goto exit;
 }
 
-struct NvtxParamsCommInitRank
-{
-  int rank;
-  int nranks;
-  int cudaDev;
-};
-constexpr nvtxPayloadSchemaEntry_t CommInitRankSchema[] = {
-  {0, NVTX_PAYLOAD_ENTRY_TYPE_INT, "Rank"},
-  {0, NVTX_PAYLOAD_ENTRY_TYPE_INT, "No. of ranks", nullptr, 0, offsetof(NvtxParamsCommInitRank, nranks)},
-  {0, NVTX_PAYLOAD_ENTRY_TYPE_INT, "CUDA device", nullptr, 0, offsetof(NvtxParamsCommInitRank, cudaDev)},
-};
-
 NCCL_API(ncclResult_t, ncclCommInitRank, ncclComm_t* newcomm, int nranks, ncclUniqueId commId, int myrank);
 ncclResult_t ncclCommInitRank(ncclComm_t* newcomm, int nranks, ncclUniqueId commId, int myrank) {
   // Load the CUDA driver and dlsym hooks (can fail on old drivers)
@@ -1469,12 +1443,12 @@ static ncclResult_t commReclaim(struct ncclAsyncJob* job_) {
   if (comm->intraComm0 != NULL) {
     int curRankCnt;
     int curRank; /* Debug info */
-    int intraRanks = comm->intraRanks;
     ncclComm_t intracomm0 = comm->intraComm0;
     int *finalizeRankCnt = &intracomm0->finalizeRankCnt;
 
     assert(intracomm0 != NULL && finalizeRankCnt != NULL);
     curRankCnt = __atomic_add_fetch(finalizeRankCnt, 1, __ATOMIC_ACQ_REL);
+    int intraRanks = 1;
     if (curRankCnt == intraRanks) {
       ncclComm_t curIntraComm;
       ncclComm_t nextIntraComm = intracomm0;
@@ -1521,12 +1495,8 @@ ncclResult_t ncclCommDestroy(ncclComm_t comm) {
     return ncclSuccess;
   }
 
-  int rank = comm->rank, nranks = comm->nRanks, cudaDev = comm->cudaDev;
   struct ncclCommFinalizeAsyncJob *job = NULL;
   ncclResult_t res = ncclSuccess;
-
-  NvtxParamsCommInitRank payload{rank, nranks, cudaDev};
-  NVTX3_FUNC_WITH_PARAMS(CommDestroy, CommInitRankSchema, payload)
 
   TRACE(NCCL_INIT, "comm %p rank %d nRanks %d cudaDev %d busId %lx", comm, rank, nranks, cudaDev, comm->busId);
   // Try and prevent a double free of the comm struct (user error)

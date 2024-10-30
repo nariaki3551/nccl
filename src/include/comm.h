@@ -513,8 +513,6 @@ struct ncclComm {
   // Intra-process sync
   struct ncclComm* intraComm0; // leader of intra-process comms (self possible)
   struct ncclComm* intraNext; // next of intra-process comms, intraComm0 is head
-  int intraRank;
-  int intraRanks;
   uint32_t intraBarrierPhase;
   char intraPad1[64 - sizeof(uint64_t)];
   uint64_t intraBarrierCounter; // only used if this is intraComm0
@@ -642,19 +640,8 @@ finish:
 
 inline void ncclCommIntraBarrierIn(struct ncclComm* comm, uint32_t x) {
   int phase = comm->intraBarrierPhase;
-  if (comm->intraRanks == 1) {
-    // Release everyone (just me).
-    comm->intraBarrierGate = (uint64_t(x)<<32) | (phase^1);
-  } else {
-    struct ncclComm* comm0 = comm->intraComm0;
-    uint64_t count = __atomic_add_fetch(&comm0->intraBarrierCounter, (uint64_t(x)<<32) + 1, __ATOMIC_RELEASE);
-    if (uint32_t(count) == uint32_t(comm->intraRanks)) {
-      // Reset.
-      __atomic_store_n(&comm0->intraBarrierCounter, 0, __ATOMIC_RELAXED);
-      // Release everyone.
-      __atomic_store_n(&comm0->intraBarrierGate, (count>>32<<32) | (phase^1), __ATOMIC_RELEASE);
-    }
-  }
+  // Release everyone (just me).
+  comm->intraBarrierGate = (uint64_t(x)<<32) | (phase^1);
 }
 
 // returns sum of x values contributed to ncclCommIntraBarrierIn(comm, x)
@@ -671,7 +658,6 @@ inline uint32_t ncclCommIntraBarrierOut(struct ncclComm* comm) {
       gate = __atomic_load_n(&comm0->intraBarrierGate, __ATOMIC_RELAXED);
     } while ((gate & 1) != phase);
   }
-  if (comm->intraRanks != 1) __atomic_thread_fence(__ATOMIC_ACQUIRE);
   return gate>>32;
 }
 
