@@ -492,22 +492,13 @@ static ncclResult_t fillInfo(struct ncclComm* comm, struct ncclPeerInfo* info, u
   info->comm = comm;
 
   // MNNVL support
-  {
-    // MNNVL: Request the fabric UUID and partition info
-    char busId[NVML_DEVICE_PCI_BUS_ID_BUFFER_SIZE];
-    nvmlDevice_t nvmlDev;
-    NCCLCHECK(int64ToBusId(info->busId, busId));
-    NCCLCHECK(ncclNvmlDeviceGetHandleByPciBusId(busId, &nvmlDev));
-    info->fabricInfo.state = NVML_GPU_FABRIC_STATE_NOT_SUPPORTED;
-    (void) ncclNvmlDeviceGetGpuFabricInfoV(nvmlDev, &info->fabricInfo);
-    if (info->fabricInfo.state != NVML_GPU_FABRIC_STATE_NOT_SUPPORTED) {
-      INFO(NCCL_INIT, "MNNVL busId 0x%lx fabric UUID %lx.%lx cliqueId 0x%x state %d healthMask 0x%x",
-           info->busId,
-           ((long *)&info->fabricInfo.clusterUuid)[0], ((long *)&info->fabricInfo.clusterUuid)[1],
-           info->fabricInfo.cliqueId, info->fabricInfo.state, info->fabricInfo.healthMask);
-    }
-    if (ncclParamMNNVLCliqueId() != -1) info->fabricInfo.cliqueId = ncclParamMNNVLCliqueId();
-  }
+  // MNNVL: Request the fabric UUID and partition info
+  char busId[NVML_DEVICE_PCI_BUS_ID_BUFFER_SIZE];
+  nvmlDevice_t nvmlDev;
+  NCCLCHECK(int64ToBusId(info->busId, busId));
+  NCCLCHECK(ncclNvmlDeviceGetHandleByPciBusId(busId, &nvmlDev));
+  info->fabricInfo.state = NVML_GPU_FABRIC_STATE_NOT_SUPPORTED;
+  (void) ncclNvmlDeviceGetGpuFabricInfoV(nvmlDev, &info->fabricInfo);
 
   return ncclSuccess;
 }
@@ -695,9 +686,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     }
   }
 
-  // Determine local Nvls support
-  // NCCLCHECK(ncclNvlsInit(comm));
-
   // Get rings and trees
   memset(ringGraph, 0, sizeof(struct ncclTopoGraph));
   ringGraph->id = 0;
@@ -784,26 +772,7 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     }
     comm->rankToNode[r] = node;
 
-    // if (comm->cpuArch != allGather3Data[r].cpuArch &&
-    //     comm->cpuArch != NCCL_TOPO_CPU_ARCH_MIXED) {
-    //   comm->cpuArch = NCCL_TOPO_CPU_ARCH_MIXED;
-    // }
-    // if (comm->cpuVendor != allGather3Data[r].cpuVendor &&
-    //     comm->cpuVendor != NCCL_TOPO_CPU_VENDOR_MIXED) {
-    //   comm->cpuVendor = NCCL_TOPO_CPU_VENDOR_MIXED;
-    // }
   }
-
-  // Alert the user to the presence of mixed CPUs. In the past this has caused
-  // locks in some collective routines. This may help debug issues in the future.
-  // if (rank==0) {
-  //   if (comm->cpuArch == NCCL_TOPO_CPU_ARCH_MIXED) {
-  //     INFO(NCCL_GRAPH, "CPUs with mixed architecture were detected.");
-  //   }
-  //   if (comm->cpuVendor == NCCL_TOPO_CPU_VENDOR_MIXED) {
-  //     INFO(NCCL_GRAPH, "CPUs with mixed vendors were detected.");
-  //   }
-  // }
 
   // Now that we know nNodes, alloc nodeRanks and compute localRanks for each node
   NCCLCHECKGOTO(ncclCalloc(&comm->nodeRanks, comm->nNodes), ret, fail);
