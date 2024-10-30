@@ -185,7 +185,6 @@ static ncclResult_t cudaPfnFuncLoader(void) {
 }
 #endif
 
-static pthread_once_t initOnceControl = PTHREAD_ONCE_INIT;
 static ncclResult_t initResult;
 
 static void initOnceFunc() {
@@ -194,52 +193,16 @@ static void initOnceFunc() {
     ncclCudaLaunchBlocking = val!=nullptr && val[0]!=0 && !(val[0]=='0' && val[1]==0);
   } while (0);
 
-  ncclResult_t ret = ncclSuccess;
-  int cudaDev;
-  int driverVersion;
-  CUDACHECKGOTO(cudaGetDevice(&cudaDev), ret, error); // Initialize the driver
-
-  CUDACHECKGOTO(cudaDriverGetVersion(&driverVersion), ret, error);
-  INFO(NCCL_INIT, "cudaDriverVersion %d", driverVersion);
-
-  if (driverVersion < CUDA_DRIVER_MIN_VERSION) {
-    // WARN("CUDA Driver version found is %d. Minimum requirement is %d", driverVersion, CUDA_DRIVER_MIN_VERSION);
-    // Silently ignore version check mismatch for backwards compatibility
-    goto error;
-  }
-
-  #if CUDART_VERSION >= 11030
-  if (cudaPfnFuncLoader()) {
-    WARN("CUDA some PFN functions not found in the library");
-    goto error;
-  }
-  #endif
+  cudaPfnFuncLoader();
 
   // Determine whether we support the cuMem APIs or not
   ncclCuMemSupported = ncclIsCuMemSupported();
 
-#if 12020 <= CUDART_VERSION && CUDART_VERSION <= 12030
-  /* To use cuMem* for host memory allocation, we need to create context on each
-   * visible device. This is workaround needed in CUDA 12.3 which is fixed in 12.4. */
-  if (ncclCuMemSupported && ncclCuMemHostEnable()) {
-    int deviceCnt, saveDevice;
-    cudaGetDevice(&saveDevice);
-    cudaGetDeviceCount(&deviceCnt);
-    for (int i = 0; i < deviceCnt; ++i) {
-      cudaSetDevice(i);
-      cudaFree(NULL);
-    }
-    cudaSetDevice(saveDevice);
-  }
-#endif
-  initResult = ret;
-  return;
-error:
-  initResult = ncclSystemError;
+  initResult = ncclSuccess;
   return;
 }
 
 ncclResult_t ncclCudaLibraryInit() {
-  pthread_once(&initOnceControl, initOnceFunc);
+  initOnceFunc();
   return initResult;
 }
