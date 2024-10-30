@@ -59,7 +59,8 @@ ncclUniqueId getUniqueId(int rank) {
 }
 void ncclCheck(ncclResult_t result, const char* file, int line) {
     if (result != ncclSuccess) {
-        fprintf(stderr, "NCCL error at %s:%d : %s\n", file, line, ncclGetErrorString(result));
+        // fprintf(stderr, "NCCL error at %s:%d : %s\n", file, line, ncclGetErrorString(result));
+        fprintf(stderr, "NCCL error at %s:%d\n", file, line);
         exit(EXIT_FAILURE);
     }
 }
