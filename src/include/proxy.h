@@ -377,6 +377,5 @@ ncclResult_t ncclProxyClientGetFdBlocking(struct ncclComm* comm, int rank, void 
 ncclResult_t ncclProxyClientQueryFdBlocking(struct ncclComm* comm, struct ncclProxyConnector* proxyConn, int localFd, int* rmtFd);
 
 ncclResult_t ncclProxyStop(struct ncclComm* comm);
-ncclResult_t ncclProxyShmUnlink(struct ncclComm* comm);
 ncclResult_t ncclProxyDestroy(struct ncclComm* comm);
 #endif
