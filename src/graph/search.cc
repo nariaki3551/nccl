@@ -968,9 +968,7 @@ ncclResult_t ncclTopoCompute(ncclTopoSystem* system, struct ncclTopoGraph* graph
     if (graph->nChannels > 0) return ncclSuccess;
   }
 
-  int ccMin;
-  NCCLCHECK(ncclTopoGetCompCap(system, &ccMin, NULL));
-  if (graph->pattern == NCCL_TOPO_PATTERN_NVLS && (system->nodes[NVS].count == 0 || ccMin < 90)) return ncclSuccess;
+  if (graph->pattern == NCCL_TOPO_PATTERN_NVLS) return ncclSuccess;
   // NVLS and COLLNET_DIRECT search must have ngpus heads at most.
   if (graph->pattern == NCCL_TOPO_PATTERN_NVLS || graph->pattern == NCCL_TOPO_PATTERN_COLLNET_DIRECT)
     graph->maxChannels = system->nodes[GPU].count;
@@ -988,12 +986,9 @@ ncclResult_t ncclTopoCompute(ncclTopoSystem* system, struct ncclTopoGraph* graph
   // First try crossnic, then decrease bw and finally increase bwIntra.
   int nspeeds = 0;
   float* speedArray = NULL;
-  if (system->nodes[NET].count == 0) {
-    nspeeds = ccMin >= 90 ? NSPEEDSINTRA_SM90 : NSPEEDSINTRA;
-    speedArray = ccMin >= 90 ? sm90SpeedArrayIntra : speedArrayIntra;
-  } else {
-    nspeeds = ccMin >= 90 ? NSPEEDSINTER_SM90 : NSPEEDSINTER;
-    speedArray = ccMin >= 90 ? sm90SpeedArrayInter : speedArrayInter;
+  {
+    nspeeds = NSPEEDSINTER;
+    speedArray = speedArrayInter;
   }
   int pass = 1;
   int speedIndex = 0;
@@ -1042,10 +1037,6 @@ search:
     if (globalTimeout < 0 && graph->nChannels) goto done;
 
     // Try a simpler tree
-    if (ccMin >= 90 && tmpGraph.pattern == NCCL_TOPO_PATTERN_BALANCED_TREE) {
-      tmpGraph.pattern = NCCL_TOPO_PATTERN_TREE;
-      goto search;
-    }
     tmpGraph.pattern = graph->pattern;
 
     int maxTypeIntra = system->nodes[NET].count > 0 ? tmpGraph.typeInter : PATH_SYS;
@@ -1084,7 +1075,7 @@ done:
   // We have a solution. Start from that solution and move to pass 2.
   if (pass == 1) {
     time = -1;
-    NCCLCHECK(ncclTopoDupChannels(graph, ccMin, ngpus));
+    NCCLCHECK(ncclTopoDupChannels(graph, 70, ngpus));
     memcpy(&tmpGraph, graph, sizeof(tmpGraph));
     speedIndex = 0;
     while (speedArray[speedIndex] > graph->bwInter && speedIndex < nspeeds-1) speedIndex++;
