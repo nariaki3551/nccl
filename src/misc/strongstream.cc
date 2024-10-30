@@ -28,11 +28,6 @@ struct ncclStrongStreamGraph {
   cudaGraphNode_t* tipNodes;
 };
 
-static void ncclStrongStreamGraphDelete(struct ncclStrongStreamGraph* g) {
-  free(g->tipNodes);
-  free(g);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 ncclResult_t ncclCudaGetCapturingGraph(
@@ -98,34 +93,6 @@ ncclResult_t ncclStrongStreamConstruct(struct ncclStrongStream* ss) {
   return ncclSuccess;
 }
 
-static void graphDestructor(void* arg) {
-  struct ncclStrongStreamGraph* g = (struct ncclStrongStreamGraph*)arg;
-  if (false == __atomic_exchange_n(&g->alive, false, __ATOMIC_ACQ_REL)) {
-    // Last to arrive deletes list node.
-    ncclStrongStreamGraphDelete(g);
-  }
-}
-
-ncclResult_t ncclStrongStreamDestruct(struct ncclStrongStream* ss) {
-  CUDACHECK(cudaStreamDestroy(ss->cudaStream));
-  #if CUDART_VERSION >= 11030
-    CUDACHECK(cudaEventDestroy(ss->serialEvent));
-    // Delete list of per-graph chains.
-    struct ncclStrongStreamGraph* g = ss->graphHead;
-    while (g != nullptr) {
-      struct ncclStrongStreamGraph* next = g->next;
-      if (false == __atomic_exchange_n(&g->alive, false, __ATOMIC_ACQ_REL)) {
-        // Last to arrive deletes list node.
-        ncclStrongStreamGraphDelete(g);
-      }
-      g = next;
-    }
-  #else
-    CUDACHECK(cudaEventDestroy(ss->scratchEvent));
-  #endif
-  return ncclSuccess;
-}
-
 NCCL_PARAM(GraphMixingSupport, "GRAPH_MIXING_SUPPORT", 1)
 
 static void ensureTips(struct ncclStrongStreamGraph* g, int n) {
@@ -144,55 +111,6 @@ ncclResult_t ncclStrongStreamAcquire(
       if (mixing && ss->everCaptured) {
         CUDACHECK(cudaStreamWaitEvent(ss->cudaStream, ss->serialEvent, 0));
         ss->serialEventNeedsRecord = false;
-      }
-    } else {
-      ss->everCaptured = true;
-      // Find the current graph in our list of graphs if it exists.
-      struct ncclStrongStreamGraph** pg = &ss->graphHead;
-      struct ncclStrongStreamGraph* g;
-      while (*pg != nullptr) {
-        g = *pg;
-        if (g->graphId == graph.graphId) {
-          // Move to front of list so that operations after acquire don't have to search the list.
-          *pg = g->next;
-          g->next = ss->graphHead;
-          ss->graphHead = g;
-          return ncclSuccess;
-        } else if (false == __atomic_load_n(&g->alive, __ATOMIC_ACQUIRE)) {
-          // Unrelated graph that has been destroyed. Remove and delete.
-          *pg = g->next;
-          ncclStrongStreamGraphDelete(g);
-        } else {
-          pg = &g->next;
-        }
-      }
-
-      // This is a new graph so add to the list.
-      g = (struct ncclStrongStreamGraph*)malloc(sizeof(struct ncclStrongStreamGraph));
-      g->graphId = graph.graphId;
-      g->tipNodes = nullptr;
-      g->tipCapacity = 0;
-      g->tipCount = 0;
-      g->next = ss->graphHead;
-      ss->graphHead = g;
-      g->alive = true;
-      NCCLCHECK(ncclCudaGraphAddDestructor(graph, graphDestructor, (void*)g));
-
-      if (mixing && ss->serialEventNeedsRecord) {
-        // Can only be here if previous release was for uncaptured work that
-        // elided updating the event because no capture had yet occurred.
-        CUDACHECK(cudaStreamWaitEvent(ss->cudaStream, ss->serialEvent, 0));
-        CUDACHECK(cudaEventRecord(ss->serialEvent, ss->cudaStream));
-      }
-      ss->serialEventNeedsRecord = false;
-
-      // First node in the chain must be a wait on the serialEvent.
-      if (mixing) {
-        ensureTips(g, 1);
-        CUDACHECK(cudaGraphAddEventWaitNode(&g->tipNodes[0], graph.graph, nullptr, 0, ss->serialEvent));
-        g->tipCount = 1;
-      } else {
-        g->tipCount = 0;
       }
     }
   #endif
@@ -240,29 +158,6 @@ ncclResult_t ncclStrongStreamRelease(struct ncclCudaGraph graph, struct ncclStro
   return ncclSuccess;
 }
 
-ncclResult_t ncclStrongStreamLaunchHost(
-    struct ncclCudaGraph graph, struct ncclStrongStream* ss, cudaHostFn_t fn, void* arg
-  ) {
-  #if CUDART_VERSION >= 11030
-    if (graph.graph == nullptr) {
-      CUDACHECK(cudaLaunchHostFunc(ss->cudaStream, fn, arg));
-    } else {
-      cudaHostNodeParams p;
-      p.fn = fn;
-      p.userData = arg;
-      struct ncclStrongStreamGraph* g = ss->graphHead;
-      NCCLCHECK(checkGraphId(g, graph.graphId));
-      ensureTips(g, 1);
-      CUDACHECK(cudaGraphAddHostNode(&g->tipNodes[0], graph.graph, g->tipNodes, g->tipCount, &p));
-      g->tipCount = 1;
-    }
-    ss->serialEventNeedsRecord = true;
-  #else
-    CUDACHECK(cudaLaunchHostFunc(ss->cudaStream, fn, arg));
-  #endif
-  return ncclSuccess;
-}
-
 ncclResult_t ncclStrongStreamLaunchKernel(
     struct ncclCudaGraph graph, struct ncclStrongStream* ss,
     void* fn, dim3 grid, dim3 block, void* args[], size_t sharedMemBytes
@@ -291,19 +186,6 @@ ncclResult_t ncclStrongStreamLaunchKernel(
   return ncclSuccess;
 }
 
-// Merge node list `b` into list `a` but don't add duplicates.
-static void mergeTips(struct ncclStrongStreamGraph* a, cudaGraphNode_t const* bNodes, int bn) {
-  int an = a->tipCount;
-  ensureTips(a, an + bn);
-  for (int bi=0; bi < bn; bi++) {
-    for (int ai=0; ai < an; ai++) {
-      if (a->tipNodes[ai] == bNodes[bi]) goto next_b;
-    }
-    a->tipNodes[a->tipCount++] = bNodes[bi];
-  next_b:;
-  }
-}
-
 ncclResult_t ncclStrongStreamWaitStream(
     struct ncclCudaGraph graph, struct ncclStrongStream* a, struct ncclStrongStream* b,
     bool b_subsumes_a
@@ -321,7 +203,6 @@ ncclResult_t ncclStrongStreamWaitStream(
       struct ncclStrongStreamGraph* bg = b->graphHead;
       NCCLCHECK(checkGraphId(bg, graph.graphId));
       if (b_subsumes_a) ag->tipCount = 0;
-      mergeTips(ag, bg->tipNodes, bg->tipCount);
     }
     a->serialEventNeedsRecord = true;
   #else
@@ -355,7 +236,6 @@ ncclResult_t ncclStrongStreamWaitStream(
       struct ncclStrongStreamGraph* ag = a->graphHead;
       NCCLCHECK(checkGraphId(ag, graph.graphId));
       if (b_subsumes_a) ag->tipCount = 0;
-      mergeTips(ag, bNodes, bCount);
     }
     a->serialEventNeedsRecord = true;
   #else

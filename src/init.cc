@@ -196,8 +196,6 @@ static ncclResult_t commFree(ncclComm_t comm) {
         if (comm->sharedRes->devPeers[c]) ncclCudaFree(comm->sharedRes->devPeers[c]);
       }
       free(comm->sharedRes->tpRankToLocalRank);
-      NCCLCHECK(ncclStrongStreamDestruct(&comm->sharedRes->hostStream));
-      NCCLCHECK(ncclStrongStreamDestruct(&comm->sharedRes->deviceStream));
       NCCLCHECK(ncclProxyDestroy(comm));
       free(comm->sharedRes);
     }

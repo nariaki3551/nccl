@@ -70,7 +70,6 @@ ncclResult_t ncclCudaGraphAddDestructor(struct ncclCudaGraph graph, cudaHostFn_t
 struct ncclStrongStream;
 
 ncclResult_t ncclStrongStreamConstruct(struct ncclStrongStream* ss);
-ncclResult_t ncclStrongStreamDestruct(struct ncclStrongStream* ss);
 
 // Acquire-fence the strong stream.
 ncclResult_t ncclStrongStreamAcquire(
