@@ -16,7 +16,6 @@
 #include "enqueue.h"
 #include "graph.h"
 #include "argcheck.h"
-#include "tuner.h"
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
@@ -1277,7 +1276,6 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
   comm->cudaArch = cudaArch;
 
   NCCLCHECKGOTO(initTransportsRank(comm, job->parent, timers), res, fail);
-  NCCLCHECKGOTO(ncclTunerPluginLoad(comm), res, fail);
   if (comm->tuner) {
     NCCLCHECK(comm->tuner->init(comm->nRanks, comm->nNodes, ncclDebugLog, &comm->tunerContext));
   }
@@ -1505,7 +1503,6 @@ static ncclResult_t ncclCommInitRankDev(ncclComm_t* newcomm, int nranks, int nId
     return ncclInvalidArgument;
   }
   ncclResult_t res = ncclSuccess;
-  const char* commIdEnv = NULL;
   ncclComm_t comm = NULL;
   struct ncclCommInitRankAsyncJob* job = NULL;
   // first call ncclInit, this will setup the environment
@@ -1551,16 +1548,6 @@ static ncclResult_t ncclCommInitRankDev(ncclComm_t* newcomm, int nranks, int nId
   NCCLCHECKGOTO(ncclCalloc(&job->commId, nId), res, fail);
   memcpy(job->commId, commId, nId * NCCL_UNIQUE_ID_BYTES);
 
-  commIdEnv = ncclGetEnv("NCCL_COMM_ID");
-  if (commIdEnv && myrank == 0) {
-    INFO(NCCL_ENV, "NCCL_COMM_ID set by environment to %s", commIdEnv);
-    if (nId > 1) {
-      INFO(NCCL_INIT | NCCL_ENV, "NCCL_COMM_ID cannot be used with more than one ncclUniqueId");
-      job->nId = 1;
-    }
-    // start the bootstrap root before bootstrapping, use only the first handle
-    NCCLCHECKGOTO(bootstrapCreateRoot((struct ncclBootstrapHandle*)&job->commId[0], true), res, fail);
-  }
   NCCLCHECKGOTO(ncclAsyncLaunch((struct ncclAsyncJob*)job, ncclCommInitRankFunc, NULL, ncclCommInitJobFree, comm), res, fail);
 
 exit:
@@ -1668,11 +1655,6 @@ static ncclResult_t commCleanup(ncclComm_t comm) {
   CUDACHECK(cudaGetDevice(&savedDevice));
   if (savedDevice != commDevice) {
     CUDACHECK(cudaSetDevice(commDevice));
-  }
-
-  if (comm->tuner != NULL) {
-    NCCLCHECK(comm->tuner->destroy(comm->tunerContext));
-    NCCLCHECK(ncclTunerPluginUnload(comm));
   }
 
   NCCLCHECK(commFree(comm));
