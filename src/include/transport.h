@@ -42,7 +42,6 @@ struct ncclPeerInfo {
   // MNNVL support
   nvmlGpuFabricInfoV_t fabricInfo;
   int cuMemSupport;
-  int version;
 };
 
 #define CONNECT_SIZE 256

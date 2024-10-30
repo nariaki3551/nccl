@@ -105,13 +105,6 @@ ncclResult_t pncclMemAlloc(void** ptr, size_t size);
 ncclResult_t  ncclMemFree(void *ptr);
 ncclResult_t pncclMemFree(void *ptr);
 
-/* Return the NCCL_VERSION_CODE of the NCCL library in the supplied integer.
- * This integer is coded with the MAJOR, MINOR and PATCH level of the
- * NCCL library
- */
-ncclResult_t  ncclGetVersion(int *version);
-ncclResult_t pncclGetVersion(int *version);
-
 /* Generates an Id to be used in ncclCommInitRank. ncclGetUniqueId should be
  * called once and the Id should be distributed to all ranks in the
  * communicator before calling ncclCommInitRank. */

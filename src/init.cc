@@ -60,29 +60,10 @@ static uint64_t hashUniqueId(ncclUniqueId const &id) {
 }
 
 static ncclResult_t initResult = ncclSuccess;
-static pthread_once_t initOnceControl = PTHREAD_ONCE_INIT;
-
-static void initOnceFunc() {
-  // Always initialize bootstrap network
-  NCCLCHECKGOTO(bootstrapNetInit(), initResult, exit);
-exit:;
-}
-
-static ncclResult_t ncclInit() {
-  pthread_once(&initOnceControl, initOnceFunc);
-  return initResult;
-}
-
-NCCL_API(ncclResult_t, ncclGetVersion, int* version);
-ncclResult_t ncclGetVersion(int* version) {
-  if (version == NULL) return ncclInvalidArgument;
-  *version = NCCL_VERSION_CODE;
-  return ncclSuccess;
-}
 
 NCCL_API(ncclResult_t, ncclGetUniqueId, ncclUniqueId* out);
 ncclResult_t ncclGetUniqueId(ncclUniqueId* out) {
-  NCCLCHECK(ncclInit());
+  NCCLCHECKGOTO(bootstrapNetInit(), initResult, exit);
   NCCLCHECK(PtrCheck(out, "GetUniqueId", "out"));
   struct ncclBootstrapHandle handle;
   NCCLCHECK(bootstrapGetUniqueId(&handle));
@@ -93,6 +74,8 @@ ncclResult_t ncclGetUniqueId(ncclUniqueId* out) {
   memcpy(out, &handle, sizeof(handle));
   TRACE_CALL("ncclGetUniqueId(0x%llx)", (unsigned long long)hashUniqueId(*out));
   return ncclSuccess;
+exit:;
+  return ncclSystemError;
 }
 
 // Prevent compiler from optimizing out these operations
@@ -504,7 +487,6 @@ static ncclResult_t fillInfo(struct ncclComm* comm, struct ncclPeerInfo* info, u
   info->rank = comm->rank;
   info->cudaDev = comm->cudaDev;
   info->nvmlDev = comm->nvmlDev;
-  NCCLCHECK(ncclGetVersion(&info->version));
   info->hostHash=getHostHash()+commHash;
   info->pidHash=getPidHash()+commHash;
   info->cuMemSupport = ncclCuMemEnable();
@@ -1502,7 +1484,7 @@ static ncclResult_t ncclCommInitRankDev(ncclComm_t* newcomm, int nranks, int nId
   ncclComm_t comm = NULL;
   struct ncclCommInitRankAsyncJob* job = NULL;
   // first call ncclInit, this will setup the environment
-  NCCLCHECKGOTO(ncclInit(), res, fail);
+  NCCLCHECKGOTO(bootstrapNetInit(), initResult, exit);
 
   if (ncclDebugLevel > NCCL_LOG_WARN || (ncclDebugLevel != NCCL_LOG_NONE && myrank == 0)) {
     static pthread_once_t once = PTHREAD_ONCE_INIT;
