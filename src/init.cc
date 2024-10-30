@@ -471,16 +471,6 @@ fail:
   goto exit;
 }
 
-// Pre-process the string so that running "strings" on the lib can quickly reveal the version.
-#define VERSION_STRING "NCCL version " STR(NCCL_MAJOR) "." STR(NCCL_MINOR) "." STR(NCCL_PATCH) NCCL_SUFFIX "+cuda" STR(CUDA_MAJOR) "." STR(CUDA_MINOR)
-static void showVersion() {
-  if (ncclDebugLevel == NCCL_LOG_VERSION || ncclDebugLevel == NCCL_LOG_WARN) {
-    VERSION("%s", VERSION_STRING);
-  } else {
-    INFO(NCCL_ALL,"%s", VERSION_STRING);
-  }
-}
-
 NCCL_PARAM(MNNVLCliqueId, "MNNVL_CLIQUE_ID", -1);
 
 static ncclResult_t fillInfo(struct ncclComm* comm, struct ncclPeerInfo* info, uint64_t commHash) {
@@ -1486,10 +1476,6 @@ static ncclResult_t ncclCommInitRankDev(ncclComm_t* newcomm, int nranks, int nId
   // first call ncclInit, this will setup the environment
   NCCLCHECKGOTO(bootstrapNetInit(), initResult, exit);
 
-  if (ncclDebugLevel > NCCL_LOG_WARN || (ncclDebugLevel != NCCL_LOG_NONE && myrank == 0)) {
-    static pthread_once_t once = PTHREAD_ONCE_INIT;
-    pthread_once(&once, showVersion);
-  }
   // Make sure the CUDA runtime is initialized.
   CUDACHECKGOTO(cudaFree(NULL), res, fail);
 
