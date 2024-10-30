@@ -18,8 +18,6 @@
 #include <new>
 #include <type_traits>
 
-int ncclCudaCompCap();
-
 // PCI Bus ID <-> int64 conversion functions
 ncclResult_t int64ToBusId(int64_t id, char* busId);
 ncclResult_t busIdToInt64(const char* busId, int64_t* id);

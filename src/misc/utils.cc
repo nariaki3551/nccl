@@ -11,16 +11,6 @@
 
 #include <stdlib.h>
 
-// Get current Compute Capability
-int ncclCudaCompCap() {
-  int cudaDev;
-  if (cudaGetDevice(&cudaDev) != cudaSuccess) return 0;
-  int ccMajor, ccMinor;
-  if (cudaDeviceGetAttribute(&ccMajor, cudaDevAttrComputeCapabilityMajor, cudaDev) != cudaSuccess) return 0;
-  if (cudaDeviceGetAttribute(&ccMinor, cudaDevAttrComputeCapabilityMinor, cudaDev) != cudaSuccess) return 0;
-  return ccMajor*10+ccMinor;
-}
-
 ncclResult_t int64ToBusId(int64_t id, char* busId) {
   sprintf(busId, "%04lx:%02lx:%02lx.%01lx", (id) >> 20, (id & 0xff000) >> 12, (id & 0xff0) >> 4, (id & 0xf));
   return ncclSuccess;
