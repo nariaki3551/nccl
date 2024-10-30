@@ -583,82 +583,11 @@ NCCL_PARAM(AllocP2pNetLLBuffers, "ALLOC_P2P_NET_LL_BUFFERS", 0);
 // MNNVL: Flag to indicate whether to enable Multi-Node NVLink
 NCCL_PARAM(MNNVLEnable, "MNNVL_ENABLE", 2);
 
-// #if CUDART_VERSION >= 11030
-
-// #include <cuda.h>
-// #include "cudawrap.h"
-
-// // Determine if MNNVL support is available
-// static int checkMNNVL(struct ncclComm* comm) {
-//   ncclResult_t ret = ncclSuccess;
-
-//   // MNNVL requires cuMem to be enabled
-//   if (!ncclCuMemEnable()) return 0;
-
-//   // MNNVL also requires FABRIC handle support
-//   int cudaDev;
-//   int flag = 0;
-//   CUdevice currentDev;
-//   CUDACHECK(cudaGetDevice(&cudaDev));
-//   CUCHECK(cuDeviceGet(&currentDev, cudaDev));
-//   // Ignore error if CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED is not supported
-//   (void) CUPFN(cuDeviceGetAttribute(&flag, CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED, currentDev));;
-//   if (!flag) return 0;
-//   // Check that all ranks have initialized the fabric fully
-//   for (int i = 0; i < comm->nRanks; i++) {
-//     if (comm->peerInfo[i].fabricInfo.state != NVML_GPU_FABRIC_STATE_COMPLETED) return 0;
-//   }
-
-//   // Determine our MNNVL domain/clique
-//   NCCLCHECKGOTO(ncclCalloc(&comm->clique.ranks, comm->nRanks), ret, fail);
-//   comm->clique.id = comm->peerInfo[comm->rank].fabricInfo.cliqueId;
-//   for (int i = 0; i < comm->nRanks; i++) {
-//     nvmlGpuFabricInfoV_t *fabricInfo1 = &comm->peerInfo[comm->rank].fabricInfo;
-//     nvmlGpuFabricInfoV_t *fabricInfo2 = &comm->peerInfo[i].fabricInfo;
-//     // Check if the cluster UUID and cliqueId match
-//     // A zero UUID means we don't have MNNVL fabric info - disable MNNVL
-//     if ((((long *)&fabricInfo2->clusterUuid)[0]|((long *)fabricInfo2->clusterUuid)[1]) == 0) goto fail;
-//     if ((memcmp(fabricInfo1->clusterUuid, fabricInfo2->clusterUuid, NVML_GPU_FABRIC_UUID_LEN) == 0) &&
-//         (fabricInfo1->cliqueId == fabricInfo2->cliqueId)) {
-//       if (i == comm->rank) {
-//         comm->cliqueRank = comm->clique.size;
-//       }
-//       comm->clique.ranks[comm->clique.size++] = i;
-//     }
-//   }
-//   // Determine whether to enable MNNVL or not
-//   comm->MNNVL = ncclParamMNNVLEnable() == 2 ? comm->clique.size > 1 : ncclParamMNNVLEnable();
-//   INFO(NCCL_INIT, "MNNVL %d cliqueId %x cliqueSize %d cliqueRank %d ", comm->MNNVL, comm->clique.id, comm->clique.size, comm->cliqueRank);
-
-//   if (comm->MNNVL) {
-//     // Force the CUMEM handle type to be FABRIC for MNNVL
-//     ncclCuMemHandleType = CU_MEM_HANDLE_TYPE_FABRIC;
-//   }
-
-//   return comm->MNNVL;
-
-// fail:
-//   if (comm->clique.ranks) free(comm->clique.ranks);
-//   return 0;
-// }
-
-// #else
 static int checkMNNVL(struct ncclComm* comm) {
   return 0;
 }
-// #endif
 
-#define TIMER_INIT_TOTAL 0
-#define TIMER_INIT_KERNELS 1
-#define TIMER_INIT_BOOTSTRAP 2
-#define TIMER_INIT_ALLGATHER 3
-#define TIMER_INIT_TOPO 4
-#define TIMER_INIT_GRAPHS 5
-#define TIMER_INIT_CONNECT 6
-#define TIMER_INIT_ALLOC 7
-#define TIMERS_INIT_COUNT 8
-
-static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* parent, uint64_t timers[TIMERS_INIT_COUNT]) {
+static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* parent){
   // We use 2 AllGathers
   // 1. { peerInfo, comm, compCap}
   // 2. { nChannels, graphInfo, topoRanks }
@@ -701,39 +630,10 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   int* pxnPeers = NULL;
   int *topParentLocalRanks = NULL;
 
-  timers[TIMER_INIT_ALLGATHER] = clockNano();
   // AllGather1 - begin
   NCCLCHECKGOTO(ncclCalloc(&comm->peerInfo, nranks+1), ret, fail); // Extra rank to represent CollNet root
   NCCLCHECKGOTO(fillInfo(comm, comm->peerInfo+rank, comm->commHash), ret, fail);
   NCCLCHECKGOTO(bootstrapAllGather(comm->bootstrap, comm->peerInfo, sizeof(struct ncclPeerInfo)), ret, fail);
-
-  // comm->cuMemSupport = 1;
-  // for (int i = 0; i < nranks; i++) {
-  //   if (comm->peerInfo[i].version != comm->peerInfo[rank].version) {
-  //     WARN("Mismatched NCCL version detected : rank %d version %d rank %d version %d",
-  //          i, comm->peerInfo[i].version, rank, comm->peerInfo[rank].version);
-  //     ret = ncclInvalidUsage;
-  //     goto fail;
-  //   }
-  //   if (comm->peerInfo[i].hostHash != comm->peerInfo[rank].hostHash) nNodes++;
-  //   if (!comm->peerInfo[i].cuMemSupport) comm->cuMemSupport = 0;
-  //   if ((i != rank) && (comm->peerInfo[i].hostHash == comm->peerInfo[rank].hostHash) && (comm->peerInfo[i].busId == comm->peerInfo[rank].busId)) {
-  //     WARN("Duplicate GPU detected : rank %d and rank %d both on CUDA device %lx", rank, i, comm->peerInfo[rank].busId);
-  //     ret = ncclInvalidUsage;
-  //     goto fail;
-  //   }
-  // }
-  // nNodes = 2; // 本来は上記のforでhostHashを見てノード数を算出
-  // AllGather1 - end
-  timers[TIMER_INIT_ALLGATHER] = clockNano() - timers[TIMER_INIT_ALLGATHER];
-
-  // MNNVL support
-  // if (nNodes > 1 && !checkMNNVL(comm) && ncclParamMNNVLEnable() == 1) {
-  //   // Return an error if the user specifically requested MNNVL support
-  //   WARN("MNNVL is not supported on this system");
-  //   ret = ncclSystemError;
-  //   goto fail;
-  // }
 
   do {
     // Compute intra-process ranks
@@ -778,7 +678,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     comm->intraBarrierGate = 0;
   } while(0);
 
-  timers[TIMER_INIT_TOPO] = clockNano();
   // Topo detection / System graph creation
   NCCLCHECKGOTO(ncclTopoGetSystem(comm, &comm->topo), ret, fail);
   // Compute paths between GPUs and NICs
@@ -793,7 +692,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   // NCCLCHECKGOTO(ncclTopoComputeCommCPU(comm), ret, fail);
   // Print final topology
   NCCLCHECKGOTO(ncclTopoPrint(comm->topo), ret, fail);
-  timers[TIMER_INIT_TOPO] = clockNano() - timers[TIMER_INIT_TOPO];
 
   // Set Affinity to a CPU local the our GPU, so that all memory we allocate
   // on the host is local.
@@ -817,7 +715,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   // Determine local Nvls support
   // NCCLCHECK(ncclNvlsInit(comm));
 
-  timers[TIMER_INIT_GRAPHS] = clockNano();
   // Get rings and trees
   memset(ringGraph, 0, sizeof(struct ncclTopoGraph));
   ringGraph->id = 0;
@@ -860,16 +757,12 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   nvlsGraph->pattern = NCCL_TOPO_PATTERN_NVLS;
   nvlsGraph->minChannels = 1;
   nvlsGraph->maxChannels = MAXCHANNELS;
-  timers[TIMER_INIT_GRAPHS] = clockNano() - timers[TIMER_INIT_GRAPHS];
 
   if (comm->rank == ncclParamGraphDumpFileRank()) {
     struct ncclTopoGraph* dumpGraphs[5] = { ringGraph, treeGraph, collNetDirectGraph, collNetChainGraph, nvlsGraph };
     NCCLCHECKGOTO(ncclTopoDumpGraphs(comm->topo, 5, dumpGraphs), ret, fail);
   }
 
-  // Because timers[[TIMER_INIT_ALLGATHER] already contains the timing of the first allgather,
-  // we temporarily store the start time of the subsequent one in an as-of-yet unused CONNECT timer.
-  timers[TIMER_INIT_CONNECT] = clockNano();
   // AllGather3 - begin
   NCCLCHECKGOTO(ncclCalloc(&allGather3Data, nranks), ret, fail);
 
@@ -1005,7 +898,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   NCCLCHECKGOTO(ncclCalloc(&rings, nranks*MAXCHANNELS), ret, fail);
   NCCLCHECKGOTO(ncclTopoPostset(comm, nodesFirstRank, nodesTreePatterns, allTopoRanks, rings, graphs, parent), ret, fail);
   // AllGather3 - end
-  timers[TIMER_INIT_ALLGATHER] += clockNano() - timers[TIMER_INIT_CONNECT];
 
   TRACE(NCCL_INIT, "rank %d nranks %d - BUILT %d TREES/RINGS", rank, nranks, comm->nChannels);
 
@@ -1053,7 +945,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   }
   NCCLCHECKGOTO(ncclCalloc(&comm->gproxyConn, comm->nRanks), ret, fail);
 
-  timers[TIMER_INIT_CONNECT] = clockNano();
   do { // Build p2p schedule
     int node = comm->node;
     int nNodes = comm->nNodes;
@@ -1146,7 +1037,6 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   // Call devCommSetup before the last barrier, making sure we don't have a thread running in front and starting to
   // launch NCCL kernels before all cuda mem allocation is complete. That could cause a deadlock.
   NCCLCHECKGOTO(devCommSetup(comm), ret, fail);
-  timers[TIMER_INIT_CONNECT] = clockNano() -  timers[TIMER_INIT_CONNECT];
 
   // We should have allocated all buffers, collective fifos, ... we can
   // restore the affinity.
@@ -1206,81 +1096,36 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
   int archMajor, archMinor;
   size_t maxLocalSizeBytes = 0;
   int cudaDev = job->cudaDev;
-  int* parentRanks = NULL;
   int cudaArch;
-  double sum_timers = 0;
-  uint64_t timers[TIMERS_INIT_COUNT] = {0};
   unsigned long long commIdHash;
 
-  timers[TIMER_INIT_TOTAL] = clockNano();
   CUDACHECKGOTO(cudaSetDevice(cudaDev), res, fail);
   CUDACHECKGOTO(cudaDeviceGetAttribute(&archMajor, cudaDevAttrComputeCapabilityMajor, cudaDev), res, fail);
   CUDACHECKGOTO(cudaDeviceGetAttribute(&archMinor, cudaDevAttrComputeCapabilityMinor, cudaDev), res, fail);
   cudaArch = 100*archMajor + 10*archMinor;
 
-  timers[TIMER_INIT_KERNELS] = clockNano();
   NCCLCHECK(ncclInitKernelsForDevice(cudaArch, &maxLocalSizeBytes));
-  // Set the maximum kernel stack size of all kernels to avoid
-  // a CUDA memory reconfig on load (c.f. NVSHMEM issue)
-  if (maxLocalSizeBytes > 0 && ncclParamSetStackSize() == 1) {
-    TRACE(NCCL_INIT, "Setting cudaLimitStackSize to %zu", maxLocalSizeBytes);
-    CUDACHECKIGNORE(cudaDeviceSetLimit(cudaLimitStackSize, maxLocalSizeBytes));
-  }
-  timers[TIMER_INIT_KERNELS] = clockNano() - timers[TIMER_INIT_KERNELS];
 
   {
-    timers[TIMER_INIT_ALLOC] = clockNano();
     NCCLCHECKGOTO(commAlloc(comm, NULL, job->nranks, job->myrank), res, fail);
-    timers[TIMER_INIT_ALLOC] = clockNano() - timers[TIMER_INIT_ALLOC];
     // obtain a unique hash using the first commId
     comm->commHash = getHash(job->commId->internal, NCCL_UNIQUE_ID_BYTES);
     commIdHash = hashUniqueId(job->commId[0]);
     INFO(NCCL_INIT, "%s comm %p rank %d nranks %d cudaDev %d nvmlDev %d busId %lx commId 0x%llx - Init START", job->funcName,
          comm, comm->rank, comm->nRanks, comm->cudaDev, comm->nvmlDev, comm->busId, commIdHash);
-    timers[TIMER_INIT_BOOTSTRAP] = clockNano();
     NCCLCHECKGOTO(bootstrapInit(job->nId, (struct ncclBootstrapHandle*)job->commId, comm), res, fail);
-    timers[TIMER_INIT_BOOTSTRAP] = clockNano() - timers[TIMER_INIT_BOOTSTRAP];
   }
   comm->cudaArch = cudaArch;
 
-  NCCLCHECKGOTO(initTransportsRank(comm, job->parent, timers), res, fail);
-  if (comm->tuner) {
-    NCCLCHECK(comm->tuner->init(comm->nRanks, comm->nNodes, ncclDebugLog, &comm->tunerContext));
-  }
+  NCCLCHECKGOTO(initTransportsRank(comm, job->parent), res, fail);
 
   // update communicator state
   comm->initState = ncclSuccess;
-  timers[TIMER_INIT_TOTAL] = clockNano() - timers[TIMER_INIT_TOTAL];
-
-  // Trace this call for replay tool
-  if (job->parent) {
-    /* unlink child abort flag. */
-    __atomic_store_n(&job->parent->childAbortFlag, NULL, __ATOMIC_RELEASE);
-    TRACE_CALL("ncclCommSplit(%p, %d, %d, %p, %d, %d)", job->parent, job->color, job->key, comm, comm->rank, comm->nRanks);
-    INFO(NCCL_INIT, "%s comm %p rank %d nranks %d cudaDev %d nvmlDev %d busId %lx parent %p color %d key %d - Init COMPLETE", job->funcName,
-         comm, comm->rank, comm->nRanks, comm->cudaDev, comm->nvmlDev, comm->busId, job->parent, job->color, job->key);
-  } else {
-    // the name for the replay tool is ncclCommInitRank for all the variations
-    TRACE_CALL("ncclCommInitRank(%p, %d, 0x%llx, %d, %d)", comm, comm->nRanks, commIdHash, comm->rank, comm->cudaDev);
-    INFO(NCCL_INIT, "%s comm %p rank %d nranks %d cudaDev %d nvmlDev %d busId %lx commId 0x%llx - Init COMPLETE", job->funcName,
-         comm, comm->rank, comm->nRanks, comm->cudaDev, comm->nvmlDev, comm->busId, commIdHash);
-  }
-  sum_timers = 0.0;
-  for (int it = 1; it < TIMERS_INIT_COUNT; ++it)
-    sum_timers += (timers[it] / 1e9);
-  INFO(NCCL_INIT | NCCL_PROFILE,
-       "Init timings - %s: rank %d nranks %d total %.2f (kernels %.2f, alloc %.2f, bootstrap %.2f, allgathers %.2f, topo %.2f, graphs %.2f, "
-       "connections %.2f, rest %.2f)",
-       job->funcName, comm->rank, comm->nRanks,
-       timers[TIMER_INIT_TOTAL] / 1e9, timers[TIMER_INIT_KERNELS] / 1e9, timers[TIMER_INIT_ALLOC] / 1e9,
-       timers[TIMER_INIT_BOOTSTRAP] / 1e9, timers[TIMER_INIT_ALLGATHER] / 1e9, timers[TIMER_INIT_TOPO] / 1e9,
-       timers[TIMER_INIT_GRAPHS] / 1e9, timers[TIMER_INIT_CONNECT] / 1e9, timers[TIMER_INIT_TOTAL] / 1e9 - sum_timers);
 exit:
   if (job->newcomm) {
     /* assign it to user pointer. */
     __atomic_store_n(job->newcomm, comm, __ATOMIC_RELEASE);
   }
-  free(parentRanks);
   return res;
 fail:
   comm->initState = res;
@@ -1477,15 +1322,7 @@ static ncclResult_t ncclCommInitRankDev(ncclComm_t* newcomm, int nranks, int nId
   NCCLCHECKGOTO(bootstrapNetInit(), initResult, exit);
 
   // Make sure the CUDA runtime is initialized.
-  CUDACHECKGOTO(cudaFree(NULL), res, fail);
-
-  NCCLCHECKGOTO(PtrCheck(newcomm, "CommInitRank", "newcomm"), res, fail);
-  NCCLCHECKGOTO(PtrCheck(config, "CommInitRank", "config"), res, fail);
-  if (nranks < 1 || myrank < 0 || myrank >= nranks) {
-    WARN("Invalid rank requested : %d/%d", myrank, nranks);
-    res = ncclInvalidArgument;
-    goto fail;
-  }
+  // CUDACHECKGOTO(cudaFree(NULL), res, fail);
 
   NCCLCHECKGOTO(ncclCalloc(&comm, 1), res, fail);
   NCCLCHECKGOTO(ncclCalloc(&comm->abortFlag, 1), res, fail);

@@ -92,18 +92,7 @@ ncclResult_t bootstrapNetInit() {
   if (bootstrapNetInitDone == 0) {
     pthread_mutex_lock(&bootstrapNetLock);
     if (bootstrapNetInitDone == 0) {
-      {
-        int nIfs = ncclFindInterfaces(bootstrapNetIfName, &bootstrapNetIfAddr, MAX_IF_NAME_SIZE, 1);
-        if (nIfs <= 0) {
-          WARN("Bootstrap : no socket interface found");
-          pthread_mutex_unlock(&bootstrapNetLock);
-          return ncclInternalError;
-        }
-      }
-      char line[SOCKET_NAME_MAXLEN+MAX_IF_NAME_SIZE+2];
-      sprintf(line, " %s:", bootstrapNetIfName);
-      ncclSocketToString(&bootstrapNetIfAddr, line+strlen(line));
-      INFO(NCCL_BOOTSTRAP, "Bootstrap : Using%s", line);
+      ncclFindInterfaces(bootstrapNetIfName, &bootstrapNetIfAddr, MAX_IF_NAME_SIZE, 1);
       bootstrapNetInitDone = 1;
     }
     pthread_mutex_unlock(&bootstrapNetLock);
@@ -498,15 +487,7 @@ ncclResult_t bootstrapInit(int nHandles, void* handles, struct ncclComm* comm) {
   // get the ring connection info
   memset(&nextPeer, 0, sizeof(union ringConnectInfo));
   BOOTSTRAP_PROF_OPEN(timers[BOOTSTRAP_INIT_TIME_CREATE]);
-  // if (ncclParamBootstrapNetEnable()) {
-  //   // Create net interface for other ranks to contact me (all gather)
-  //   NCCLCHECK(netGetDevice(rank, comm, &STATE_LISTEN(state, net.dev)));
-  //   NCCLCHECK(state->net->listen(STATE_LISTEN(state, net.dev), STATE_LISTEN(state, net.handle), &STATE_LISTEN(state, net.comm)));
-  //   memcpy(info.connectInfo.handle, STATE_LISTEN(state, net.handle), NCCL_NET_HANDLE_MAXSIZE);
-  // } else {
-    // create socket for ring neightbor to contact mee
-    NCCLCHECK(createListenSocket(comm, comm->magic, &STATE_LISTEN(state, socket), &info.connectInfo.addr, ncclSocketTypeBootstrap));
-  // }
+  NCCLCHECK(createListenSocket(comm, comm->magic, &STATE_LISTEN(state, socket), &info.connectInfo.addr, ncclSocketTypeBootstrap));
   // Create socket for root to contact me using the root's magic
   int curr_root = rootIdFromRank(rank, nranks, nHandles);
   NCCLCHECK(createListenSocket(comm, BOOTSTRAP_HANDLE(handles, curr_root)->magic, &listenSockRoot, &info.listenRootAddress, ncclSocketTypeBootstrap));
@@ -554,13 +535,7 @@ ncclResult_t bootstrapInit(int nHandles, void* handles, struct ncclComm* comm) {
   BOOTSTRAP_PROF_CLOSE(timers[BOOTSTRAP_INIT_TIME_RECV]);
 
   // accept and connect the ring network
-  // if (ncclParamBootstrapNetEnable()) {
-  //   NCCLCHECK(netRingConnect(state->net, &state->listen, nextPeer.handle,
-  //                            &STATE_RING(state, net.sendComm), &STATE_RING(state, net.sendDevHandle),
-  //                            &STATE_RING(state, net.recvComm), &STATE_RING(state, net.recvDevHandle), state->abortFlag));
-  // } else {
-    NCCLCHECK(socketRingConnect(&nextPeer.addr, &STATE_RING(state, socket.send), &STATE_LISTEN(state, socket), &STATE_RING(state, socket.recv), comm->magic, state->abortFlag));
-  // }
+  NCCLCHECK(socketRingConnect(&nextPeer.addr, &STATE_RING(state, socket.send), &STATE_LISTEN(state, socket), &STATE_RING(state, socket.recv), comm->magic, state->abortFlag));
 
   // AllGather all listen handlers
   // in case of failure, those resources will be free'd when calling bootstrapDestroy, so we can return immediatly
@@ -631,12 +606,7 @@ ncclResult_t bootstrapAllGather(void* commState, void* allData, int size) {
 
   uint64_t time = 0;
   BOOTSTRAP_PROF_OPEN(time);
-  // if (ncclParamBootstrapNetEnable()) {
-  //   NCCLCHECKGOTO(netRingAllGather(state->net, STATE_RING(state, net.sendComm), STATE_RING(state, net.recvComm), rank, nranks, (char*)allData, size, state->abortFlag), res, exit);
-  // } else
-  {
-    NCCLCHECKGOTO(socketRingAllGather(&STATE_RING(state, socket.send), &STATE_RING(state, socket.recv), rank, nranks, (char*)allData, size), res, exit);
-  }
+  NCCLCHECKGOTO(socketRingAllGather(&STATE_RING(state, socket.send), &STATE_RING(state, socket.recv), rank, nranks, (char*)allData, size), res, exit);
 exit:
   BOOTSTRAP_PROF_CLOSE(time);
   TRACE(NCCL_BOOTSTRAP | NCCL_PROFILE, "bootstrapAllGather for %d B done in %f sec: %f MB/sec", size, time / 1e9, (nranks * size / 1e6) / (time / 1e9));
@@ -648,24 +618,9 @@ ncclResult_t bootstrapClose(void* commState) {
   if (commState == NULL)
     return ncclSuccess;
   struct bootstrapState* state = (struct bootstrapState*)commState;
-  // close unexpected and return an error if we are not aborting and still operations in the pipe
-  // if (state->unexpectedConnections != NULL) {
-  //   unexpectedFree(state);
-  //   if (__atomic_load_n(state->abortFlag, __ATOMIC_ACQUIRE) == 0) {
-  //     WARN("Unexpected connections are not empty");
-  //     return ncclInternalError;
-  //   }
-  // }
-  // if (ncclParamBootstrapNetEnable()) {
-  //   NCCLCHECK(state->net->closeSend(STATE_RING(state, net.sendComm)));
-  //   NCCLCHECK(state->net->closeRecv(STATE_RING(state, net.recvComm)));
-  //   NCCLCHECK(state->net->closeListen(STATE_LISTEN(state, net.comm)));
-  // } else 
-  {
-    NCCLCHECK(ncclSocketClose(&STATE_RING(state, socket.send)));
-    NCCLCHECK(ncclSocketClose(&STATE_RING(state, socket.recv)));
-    NCCLCHECK(ncclSocketClose(&STATE_LISTEN(state, socket)));
-  }
+  NCCLCHECK(ncclSocketClose(&STATE_RING(state, socket.send)));
+  NCCLCHECK(ncclSocketClose(&STATE_RING(state, socket.recv)));
+  NCCLCHECK(ncclSocketClose(&STATE_LISTEN(state, socket)));
   // close the p2p socket
   NCCLCHECK(ncclSocketClose(&STATE_LISTEN(state, peerSocket)));
 
