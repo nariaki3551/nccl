@@ -103,13 +103,8 @@ struct RunWorkColl<ncclFuncAllGather, T, RedOp, NCCL_ALGO_COLLNET_DIRECT, NCCL_P
 
     int tn = nWarps1*WARP_SIZE;
     if (tid < tn) {
-      if (work->regUsed == NCCL_COLLNET_REG_BUFFER) {
-        if (tid == 0) {
-          int steps = (int)divUp(nNodes * sizePerRank * sizeof(T), NCCL_MAX_COLLNET_SIZE);
-          Primitives<T, RedOp, FanAsymmetric<0, 1>, /*Direct=*/0, Proto, 0>::sendPeerNotify(direct->out, 1, steps);
-        }
-        __syncwarp();
-      } else {
+      {
+        printf("case B\n");
         // Phase 1: send to network
         Primitives<T, RedOp, FanAsymmetric<0, 1>, /*Direct=*/0, Proto, 0>
           prims(tid, tn, nullptr, &direct->out, work->sendbuff, nullptr,
@@ -130,13 +125,8 @@ struct RunWorkColl<ncclFuncAllGather, T, RedOp, NCCL_ALGO_COLLNET_DIRECT, NCCL_P
 
     tn = nWarps2*WARP_SIZE;
     if (tid < tn) {
-      if (work->regUsed == NCCL_COLLNET_REG_BUFFER) {
-        if (tid == 0) {
-          int steps = (int)divUp(nNodes * sizePerRank * sizeof(T), NCCL_MAX_COLLNET_SIZE);
-          Primitives<T, RedOp, FanAsymmetric<1, NCCL_MAX_DIRECT_ARITY>, /*Direct=*/0, Proto, 0>::recvPeerNotify(direct->out, 0, steps);
-        }
-        __syncwarp();
-      } else {
+      {
+        printf("case D\n");
         // Phase 2: Recv network -> deposit output + send to bcast
         Primitives<T, RedOp, FanAsymmetric<1, NCCL_MAX_DIRECT_ARITY>, /*Direct=*/1, Proto, 0>
           prims(tid, tn, &direct->out, direct->heads + 1, nullptr, work->recvbuff,
@@ -148,23 +138,6 @@ struct RunWorkColl<ncclFuncAllGather, T, RedOp, NCCL_ALGO_COLLNET_DIRECT, NCCL_P
           scat.railGridOffset = railGridOffset;
           prims.template process</*Recv=*/1, /*Send=*/1>(scat, work->direct, 0);
         }
-      }
-      return;
-    }
-    tid -= tn;
-
-    tn = nWarps3*WARP_SIZE;
-    if (tid < tn) {
-      // Phase 3: Recv bcast -> deposit output
-      Primitives<T, RedOp, FanAsymmetric<NCCL_MAX_DIRECT_ARITY, 0>, /*Direct=*/1, Proto, 0>
-        prims(tid, tn, direct->heads+1, nullptr, nullptr, work->recvbuff,
-              /*redOpArg=*/0, 2*Proto::MaxGroupWidth, 0, 0, work);
-      for (ssize_t railGridOffset=0; railGridOffset < nNodes*sizePerRank; railGridOffset += nChannels*chunkSize) {
-        Scatterer</*BcastSendNotRecv=*/false> scat;
-        scat.work = work;
-        scat.chunkSize = chunkSize;
-        scat.railGridOffset = railGridOffset;
-        prims.template process</*Recv=*/1, /*Send=*/0>(scat, 0, work->direct);
       }
       return;
     }
