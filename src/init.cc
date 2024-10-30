@@ -1512,7 +1512,11 @@ static ncclResult_t ncclCommInitRankDev(ncclComm_t* newcomm, int nranks, int nId
   NCCLCHECKGOTO(ncclCalloc(&job->commId, nId), res, fail);
   memcpy(job->commId, commId, nId * NCCL_UNIQUE_ID_BYTES);
 
-  NCCLCHECKGOTO(ncclAsyncLaunch((struct ncclAsyncJob*)job, ncclCommInitRankFunc, NULL, ncclCommInitJobFree, comm), res, fail);
+  res = ncclCommInitRankFunc((struct ncclAsyncJob*)job);
+  if (res != ncclSuccess) {
+    ncclCommInitJobFree((struct ncclAsyncJob*)job);
+  }
+
 
 exit:
   return ncclGroupErrCheck(res);
