@@ -694,6 +694,5 @@ static inline ncclRedOp_t ncclUserRedOpMangle(ncclComm *comm, ncclRedOp_t op) {
 }
 
 ncclResult_t ncclCommEnsureReady(ncclComm_t comm);
-ncclResult_t ncclCommSetAsyncError(ncclComm_t comm, ncclResult_t nextState);
 
 #endif

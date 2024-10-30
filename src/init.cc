@@ -1186,7 +1186,6 @@ exit:
   /* If split resource is shared, we are not able to unlink the proxy ops pool here since the child comm can
    * attach the proxy ops pool of parent at any time; otherwise, unlink it here to make sure the pool will be
    * properly cleaned up. */
-  if (comm->sharedRes->owner == comm && !comm->config.splitShare && ret == ncclSuccess && !ncclCuMemEnable()) ncclProxyShmUnlink(comm);
   free(allTopoRanks);
   free(nodesTreePatterns);
   free(nodesFirstRank);
@@ -1586,16 +1585,6 @@ ncclResult_t ncclCommInitRank(ncclComm_t* newcomm, int nranks, ncclUniqueId comm
   return ncclSuccess;
 }
 
-ncclResult_t ncclCommSetAsyncError(ncclComm_t comm, ncclResult_t nextState) {
-  if (nextState < 0 || nextState >= ncclNumResults || comm == NULL) {
-    WARN("ncclCommSetAsyncError: error comm %p sets state %d", comm, nextState);
-    return ncclInvalidArgument;
-  }
-
-  __atomic_store_n(&comm->asyncResult, nextState, __ATOMIC_RELEASE);
-  return ncclSuccess;
-}
-
 static ncclResult_t commDestroySync(struct ncclAsyncJob* job_) {
   struct ncclCommFinalizeAsyncJob* job = (struct ncclCommFinalizeAsyncJob*) job_;
   ncclComm_t comm = job->comm;
@@ -1662,41 +1651,6 @@ static ncclResult_t commCleanup(ncclComm_t comm) {
   }
 
   return ncclSuccess;
-}
-
-NCCL_API(ncclResult_t, ncclCommFinalize, ncclComm_t comm);
-ncclResult_t ncclCommFinalize(ncclComm_t comm) {
-  NVTX3_FUNC_RANGE_IN(nccl_domain);
-  ncclResult_t ret = ncclSuccess;
-  struct ncclCommFinalizeAsyncJob *job = NULL;
-
-  NCCLCHECK(ncclGroupStartInternal());
-  if (comm == NULL) goto exit;
-
-  /* wait comm ready before finalize. */
-  NCCLCHECKGOTO(ncclCommEnsureReady(comm), ret, fail);
-
-  /* prevent double finalize. */
-  if (comm->finalizeCalled) {
-    ret = ncclInvalidArgument;
-    goto fail;
-  }
-
-  comm->finalizeCalled = true;
-  /* launch async thread to finalize comm. */
-  NCCLCHECKGOTO(ncclCalloc(&job, 1), ret, fail);
-  job->comm = comm;
-  NCCLCHECKGOTO(ncclAsyncLaunch((struct ncclAsyncJob*)job, commDestroySync, NULL, free, comm), ret, fail);
-
-exit:
-  ncclGroupErrCheck(ret);
-  NCCLCHECK(ncclGroupEndInternal());
-  if (comm && !comm->config.blocking) { NCCLCHECK(ncclCommGetAsyncError(comm, &ret)); }
-  return ret;
-fail:
-  free(job);
-  if (comm && !comm->config.blocking) (void) ncclCommSetAsyncError(comm, ret);
-  goto exit;
 }
 
 static ncclResult_t commReclaim(struct ncclAsyncJob* job_) {
@@ -1786,45 +1740,6 @@ fail:
   goto exit;
 }
 
-NCCL_API(ncclResult_t, ncclCommAbort, ncclComm_t comm);
-ncclResult_t ncclCommAbort(ncclComm_t comm) {
-  if (comm == NULL) {
-    NVTX3_FUNC_RANGE_IN(nccl_domain);
-    return ncclSuccess;
-  }
-
-  // Ask anything that might still be running on the device to quit
-  if (comm->childAbortFlag != nullptr) {
-    __atomic_store_n(comm->childAbortFlag, 1, __ATOMIC_RELEASE);
-    __atomic_store_n(comm->childAbortFlagDev, 1, __ATOMIC_RELEASE);
-  }
-  __atomic_store_n(comm->abortFlag, 1, __ATOMIC_RELEASE);
-  __atomic_store_n(comm->abortFlagDev, 1, __ATOMIC_RELEASE);
-  comm->destroyFlag = 1;
-  /* init thread must be joined before we destroy the comm,
-   * and we should ignore the init error here. */
-  (void)ncclCommEnsureReady(comm);
-
-  // once the comm is ready, we can access ranks etc
-  int rank = comm->rank, nranks = comm->nRanks, cudaDev = comm->cudaDev;
-  struct ncclCommFinalizeAsyncJob *job = NULL;
-  ncclResult_t res = ncclSuccess;
-
-  NvtxParamsCommInitRank payload{rank, nranks, cudaDev};
-  NVTX3_FUNC_WITH_PARAMS(CommAbort, CommInitRankSchema, payload)
-
-  TRACE(NCCL_INIT, "comm %p rank %d nRanks %d cudaDev %d busId %lx", comm, rank, nranks, cudaDev, comm->busId);
-
-  NCCLCHECKGOTO(ncclCalloc(&job, 1), res, fail);
-  job->comm = comm;
-  NCCLCHECKGOTO(ncclAsyncLaunch((struct ncclAsyncJob*)job, commReclaim, NULL, free, comm), res, fail);
-
-exit:
-  return ncclSuccess;
-fail:
-  goto exit;
-}
-
 struct NvtxParamsCommSplit {
   int rank;
   int nranks;
@@ -1839,21 +1754,6 @@ constexpr nvtxPayloadSchemaEntry_t CommSplitSchema[] = {
     {0, NVTX_PAYLOAD_ENTRY_TYPE_INT, "color", nullptr, 0, offsetof(NvtxParamsCommSplit, color)},
     {0, NVTX_PAYLOAD_ENTRY_TYPE_INT, "key", nullptr, 0, offsetof(NvtxParamsCommSplit, key)},
 };
-
-NCCL_API(const char*, ncclGetErrorString, ncclResult_t code);
-const char* ncclGetErrorString(ncclResult_t code) {
-  switch (code) {
-    case ncclSuccess                : return "no error";
-    case ncclUnhandledCudaError     : return "unhandled cuda error (run with NCCL_DEBUG=INFO for details)";
-    case ncclSystemError            : return "unhandled system error (run with NCCL_DEBUG=INFO for details)";
-    case ncclInternalError          : return "internal error - please report this issue to the NCCL developers";
-    case ncclInvalidArgument        : return "invalid argument (run with NCCL_DEBUG=WARN for details)";
-    case ncclInvalidUsage           : return "invalid usage (run with NCCL_DEBUG=WARN for details)";
-    case ncclRemoteError            : return "remote process exited or there was a network error";
-    case ncclInProgress             : return "NCCL operation in progress";
-    default                         : return "unknown result code";
-  }
-}
 
 /* Returns a human-readable message of the last error that occurred.
  * comm is currently unused and can be set to NULL
@@ -1871,177 +1771,4 @@ ncclResult_t ncclCommGetAsyncError(ncclComm_t comm, ncclResult_t *asyncError) {
   *asyncError = __atomic_load_n(&comm->asyncResult, __ATOMIC_ACQUIRE);
   if (*asyncError == ncclSuccess && comm->proxyState) *asyncError = __atomic_load_n(&comm->proxyState->asyncResult, __ATOMIC_ACQUIRE);
   return ncclSuccess;
-}
-
-NCCL_API(ncclResult_t, ncclCommCount, const ncclComm_t comm, int* count);
-ncclResult_t ncclCommCount(const ncclComm_t comm, int* count) {
-  NVTX3_FUNC_RANGE_IN(nccl_domain);
-
-  NCCLCHECK(CommCheck(comm, "CommCount", "comm"));
-  NCCLCHECK(PtrCheck(count, "CommCount", "count"));
-
-  /* init thread must be joined before we access the attributes of comm. */
-  NCCLCHECK(ncclCommEnsureReady(comm));
-
-  *count = comm->nRanks;
-  return ncclSuccess;
-}
-
-NCCL_API(ncclResult_t, ncclCommCuDevice, const ncclComm_t comm, int* devid);
-ncclResult_t ncclCommCuDevice(const ncclComm_t comm, int* devid) {
-  NVTX3_FUNC_RANGE_IN(nccl_domain);
-
-  NCCLCHECK(CommCheck(comm, "CommCuDevice", "comm"));
-  NCCLCHECK(PtrCheck(devid, "CommCuDevice", "devid"));
-
-  NCCLCHECK(ncclCommEnsureReady(comm));
-
-  *devid = comm->cudaDev;
-  return ncclSuccess;
-}
-
-NCCL_API(ncclResult_t, ncclCommUserRank, const ncclComm_t comm, int* rank);
-ncclResult_t ncclCommUserRank(const ncclComm_t comm, int* rank) {
-  NVTX3_FUNC_RANGE_IN(nccl_domain);
-
-  NCCLCHECK(CommCheck(comm, "CommUserRank", "comm"));
-  NCCLCHECK(PtrCheck(rank, "CommUserRank", "rank"));
-
-  NCCLCHECK(ncclCommEnsureReady(comm));
-
-  *rank = comm->rank;
-  return ncclSuccess;
-}
-
-NCCL_API(ncclResult_t, ncclMemAlloc, void **ptr, size_t size);
-ncclResult_t  ncclMemAlloc(void **ptr, size_t size) {
-  NVTX3_FUNC_RANGE_IN(nccl_domain);
-  ncclResult_t ret = ncclSuccess;
-
-#if CUDART_VERSION >= 12010
-  size_t memGran = 0;
-  size_t mcGran = 0;
-  CUdevice currentDev;
-  CUmemAllocationProp memprop = {};
-  CUmulticastObjectProp mcprop = {};
-  CUmemAccessDesc accessDesc = {};
-  CUmemGenericAllocationHandle handle;
-  int cudaDev;
-  int flag;
-  int dcnt;
-  int mcSupport = 0;
-
-  if (ptr == NULL || size == 0) goto fallback;
-
-  if (ncclCudaLibraryInit() != ncclSuccess) goto fallback;
-
-  CUDACHECK(cudaGetDevice(&cudaDev));
-  CUCHECK(cuDeviceGet(&currentDev, cudaDev));
-  if (CUPFN(cuMulticastCreate) != NULL)
-    CUCHECK(cuDeviceGetAttribute(&mcSupport, CU_DEVICE_ATTRIBUTE_MULTICAST_SUPPORTED, currentDev));
-
-  if (mcSupport) {
-    int requestedHandleTypes = CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR;
-    // Query device to see if FABRIC handle support is available
-    flag = 0;
-    (void) CUPFN(cuDeviceGetAttribute(&flag, CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED, currentDev));;
-    if (flag) requestedHandleTypes |= CU_MEM_HANDLE_TYPE_FABRIC;
-    memprop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
-    memprop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    memprop.requestedHandleTypes = (CUmemAllocationHandleType) requestedHandleTypes;
-    memprop.location.id = currentDev;
-    // Query device to see if RDMA support is available
-    flag = 0;
-    CUCHECK(cuDeviceGetAttribute(&flag, CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_CUDA_VMM_SUPPORTED, currentDev));
-    if (flag) memprop.allocFlags.gpuDirectRDMACapable = 1;
-    CUCHECK(cuMemGetAllocationGranularity(&memGran, &memprop, CU_MEM_ALLOC_GRANULARITY_RECOMMENDED));
-
-    /* mc property */
-    CUDACHECK(cudaGetDeviceCount(&dcnt));
-    mcprop.size = size;
-    /* device cnt is a dummy value right now, it might affect mc granularity in the future. */
-    mcprop.numDevices = dcnt;
-    mcprop.handleTypes = requestedHandleTypes;
-    mcprop.flags = 0;
-    CUCHECK(cuMulticastGetGranularity(&mcGran, &mcprop, CU_MULTICAST_GRANULARITY_RECOMMENDED));
-
-    /* only size needs to be aligned to mcGran */
-    ALIGN_SIZE(size, mcGran);
-    if (requestedHandleTypes & CU_MEM_HANDLE_TYPE_FABRIC) {
-      /* First try cuMemCreate() with FABRIC handle support and then remove if it fails */
-      CUresult err = CUPFN(cuMemCreate(&handle, size, &memprop, 0));
-      if (err == CUDA_ERROR_NOT_PERMITTED || err == CUDA_ERROR_NOT_SUPPORTED) {
-        requestedHandleTypes &= ~CU_MEM_HANDLE_TYPE_FABRIC;
-        memprop.requestedHandleTypes = (CUmemAllocationHandleType) requestedHandleTypes;
-        /* Allocate the physical memory on the device */
-        CUCHECK(cuMemCreate(&handle, size, &memprop, 0));
-      }
-    } else {
-      /* Allocate the physical memory on the device */
-      CUCHECK(cuMemCreate(&handle, size, &memprop, 0));
-    }
-    /* Reserve a virtual address range */
-    CUCHECK(cuMemAddressReserve((CUdeviceptr*)ptr, size, memGran, 0, 0));
-    /* Map the virtual address range to the physical allocation */
-    CUCHECK(cuMemMap((CUdeviceptr)*ptr, size, 0, handle, 0));
-    /* Now allow RW access to the newly mapped memory */
-    for (int i = 0; i < dcnt; ++i) {
-      int p2p = 0;
-      if (i == cudaDev || ((cudaDeviceCanAccessPeer(&p2p, cudaDev, i) == cudaSuccess) && p2p)) {
-        accessDesc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-        accessDesc.location.id = i;
-        accessDesc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-        CUCHECK(cuMemSetAccess((CUdeviceptr)*ptr, size, &accessDesc, 1));
-      }
-    }
-    goto exit;
-  }
-
-fallback:
-#endif
-  // Coverity is right to complain that we may pass a NULL ptr to cudaMalloc.  That's deliberate though:
-  // we want CUDA to return an error to the caller.
-  // coverity[var_deref_model]
-  CUDACHECKGOTO(cudaMalloc(ptr, size), ret, fail);
-
-exit:
-  return ret;
-fail:
-  goto exit;
-}
-
-NCCL_API(ncclResult_t, ncclMemFree, void *ptr);
-ncclResult_t  ncclMemFree(void *ptr) {
-  NVTX3_FUNC_RANGE_IN(nccl_domain);
-  ncclResult_t ret = ncclSuccess;
-  int saveDevice;
-
-  CUDACHECK(cudaGetDevice(&saveDevice));
-#if CUDART_VERSION >= 12010
-  CUdevice ptrDev = 0;
-  int mcSupport = 0;
-
-  if (ptr == NULL) goto fallback;
-
-  if (ncclCudaLibraryInit() != ncclSuccess) goto fallback;
-
-  CUCHECKGOTO(cuPointerGetAttribute((void*)&ptrDev, CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL, (CUdeviceptr)ptr), ret, fail);
-  if (CUPFN(cuMulticastCreate) != NULL)
-    CUCHECKGOTO(cuDeviceGetAttribute(&mcSupport, CU_DEVICE_ATTRIBUTE_MULTICAST_SUPPORTED, ptrDev), ret, fail);
-
-  CUDACHECKGOTO(cudaSetDevice((int)ptrDev), ret, fail);
-  if (mcSupport) {
-    NCCLCHECKGOTO(ncclCuMemFree(ptr), ret, fail);
-    goto exit;
-  }
-
-fallback:
-#endif
-  CUDACHECKGOTO(cudaFree(ptr), ret, fail);
-
-exit:
-  CUDACHECK(cudaSetDevice(saveDevice));
-  return ret;
-fail:
-  goto exit;
 }

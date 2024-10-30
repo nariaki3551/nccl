@@ -602,76 +602,6 @@ static int calcP2pChannelCount(size_t totalSize, int minChannels, int maxChannel
   return nChannels;
 }
 
-// static ncclResult_t scheduleP2pTasksToPlan(
-//     struct ncclComm* comm, struct ncclKernelPlan* plan, struct ncclKernelPlanBudget* budget
-//   ) {
-//   int nRanks = comm->nRanks;
-//   struct ncclKernelPlanner::Peer* peers = comm->planner.peers;
-
-//   plan->threadPerBlock = std::max(plan->threadPerBlock, NCCL_MAX_NTHREADS);
-//   if (!plan->kernelSpecialized) {
-//     plan->kernelFn = ncclDevKernelForFunc[ncclDevFuncId_P2p()];
-//     plan->kernelSpecialized = ncclDevKernelForFuncIsSpecialized[ncclDevFuncId_P2p()];
-//   }
-
-//   // Compute how much to split operations
-//   // Try to use all channels
-//   int nChannelsMax = comm->p2pnChannelsPerPeer;
-//   int nChannelsMin = nChannelsMax;
-//   // Try to use all channels, but one channel per operation.
-//   while (nChannelsMin*nRanks > comm->p2pnChannels && nChannelsMin > 1) nChannelsMin /= 2;
-
-//   while (comm->planner.nTasksP2p != 0) {
-//     for (int round=0; round < nRanks; round++) {
-//       int sendRank = comm->p2pSchedule[round].sendRank;
-//       int recvRank = comm->p2pSchedule[round].recvRank;
-//       struct ncclTaskP2p* send = ncclIntruQueueHead(&peers[sendRank].sendQueue);
-//       struct ncclTaskP2p* recv = ncclIntruQueueHead(&peers[recvRank].recvQueue);
-//       if (send == nullptr && recv == nullptr) continue;
-
-//       if (sendRank == comm->rank) {
-//         if (send != nullptr && recv == nullptr) {
-//           WARN("Trying to send to self without a matching recv");
-//           return ncclInvalidUsage;
-//         }
-//         if (send == nullptr && recv != nullptr) {
-//           WARN("Trying to recv to self without a matching send");
-//           return ncclInvalidUsage;
-//         }
-//       }
-//       ssize_t sendBytes = send ? send->bytes : -1;
-//       ssize_t recvBytes = recv ? recv->bytes : -1;
-//       void* sendBuff = send ? send->buff : nullptr;
-//       void* recvBuff = recv ? recv->buff : nullptr;
-
-//       if (sendRank == comm->rank && send->buff == recv->buff) {
-//         // Skip send to self in-place (we don't need to support this).
-//         ncclIntruQueueDequeue(&peers[sendRank].sendQueue);
-//         ncclIntruQueueDequeue(&peers[recvRank].recvQueue);
-//         comm->planner.nTasksP2p -= 2;
-//       } else {
-//         // Ensure room for worst case of one new batch per channel.
-//         if (!testBudget(budget, plan->nWorkBatches+nChannelsMax, plan->workBytes + sizeof(struct ncclDevWorkP2p))) {
-//           return ncclSuccess;
-//         }
-//         struct ncclTaskP2p* p2pTasks[2] = { recv, send };
-//         NCCLCHECK(addP2pToPlan(comm, plan, nChannelsMin, nChannelsMax, round, sendRank, sendBuff, sendBytes, recvRank, recvBuff, recvBytes, p2pTasks));
-//         if (send != nullptr) {
-//           ncclIntruQueueDequeue(&peers[sendRank].sendQueue);
-//           ncclIntruQueueEnqueue(&plan->p2pTaskQueue, send);
-//           comm->planner.nTasksP2p -= 1;
-//         }
-//         if (recv != nullptr) {
-//           ncclIntruQueueDequeue(&peers[recvRank].recvQueue);
-//           ncclIntruQueueEnqueue(&plan->p2pTaskQueue, recv);
-//           comm->planner.nTasksP2p -= 1;
-//         }
-//       }
-//     }
-//   }
-//   return ncclSuccess;
-// }
-
 namespace {
   struct uploadWork_cleanup_t {
     struct ncclCommEventCallback base;
@@ -700,19 +630,6 @@ static ncclResult_t uploadWork(struct ncclComm* comm, struct ncclKernelPlan* pla
     fifoCursor = sizeof(ncclDevKernelArgs) + batchBytes;
     fifoMask = ~0u;
     break;
-  // case ncclDevWorkStorageTypeFifo:
-  //   fifoBufHost = comm->workFifoBuf;
-  //   fifoCursor = comm->workFifoProduced;
-  //   fifoMask = comm->workFifoBytes-1;
-  //   waitWorkFifoAvailable(comm, fifoCursor + workBytes);
-  //   plan->kernelArgs->workBuf = comm->workFifoBufDev;
-  //   break;
-  // case ncclDevWorkStorageTypePersistent:
-  //   static_assert(16 <= alignof(max_align_t), "We rely on 16-byte alignment.");
-  //   fifoBufHost = malloc(workBytes);
-  //   fifoCursor = 0;
-  //   fifoMask = ~0u;
-  //   break;
   default:
     return ncclInternalError;
   }
@@ -1619,6 +1536,5 @@ exit:
   if (info->comm && !info->comm->config.blocking) { NCCLCHECK(ncclCommGetAsyncError(info->comm, &ret)); }
   return ret;
 fail:
-  if (info->comm && !info->comm->config.blocking) (void) ncclCommSetAsyncError(info->comm, ret);
   goto exit;
 }

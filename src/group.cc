@@ -282,16 +282,12 @@ static void groupCleanup(struct ncclComm** groupCommHeadPtr, struct ncclComm** g
       }
     }
 
-    if (!comm->config.blocking)
-      (void) ncclCommSetAsyncError(comm, error);
     comm = next;
   }
 
   /* reset everything */
   while (!ncclIntruQueueEmpty(asyncJobsPtr)) {
     struct ncclAsyncJob* job = ncclIntruQueueDequeue(asyncJobsPtr);
-    if (job->comm && !job->comm->config.blocking)
-      (void) ncclCommSetAsyncError(job->comm, error);
     if (job->undo) job->undo(job);
     if (job->destructor) job->destructor((void*)job);
   }
@@ -435,8 +431,6 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_, ncclSimInfo_t* simInf
 
   while (!ncclIntruQueueEmpty(asyncJobsMain)) {
     struct ncclAsyncJob* job = ncclIntruQueueDequeue(asyncJobsMain);
-    if (!job->destroyFlag && job->comm && !job->comm->config.blocking)
-      (void) ncclCommSetAsyncError(job->comm, ret);
     if (job->destructor) job->destructor((void*)job);
   }
 
@@ -444,9 +438,6 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_, ncclSimInfo_t* simInf
     struct ncclComm* comm = groupCommHeadMain;
     struct ncclComm* next = comm->groupNext;
     (void) ncclGroupCommLeave(comm);
-    if (!comm->config.blocking) {
-      (void) ncclCommSetAsyncError(comm, ret);
-    }
     groupCommHeadMain = next;
   }
 
@@ -509,7 +500,6 @@ ncclResult_t ncclGroupEndInternal(ncclSimInfo_t* simInfo) {
       if (!ncclIntruQueueEmpty(&ncclAsyncJobs)) {
         ncclAsyncJob* job = ncclIntruQueueHead(&ncclAsyncJobs);
         do {
-          NCCLCHECKGOTO(ncclCommSetAsyncError(job->comm, ncclInProgress), ret, fail);
           job->comm->groupJob = ncclGroupJobMainPtr;
           job = job->next;
         } while (job);
@@ -518,7 +508,6 @@ ncclResult_t ncclGroupEndInternal(ncclSimInfo_t* simInfo) {
       if (ncclGroupCommHead) {
         ncclComm_t comm = ncclGroupCommHead;
         do {
-          NCCLCHECKGOTO(ncclCommSetAsyncError(comm, ncclInProgress), ret, fail);
           /* link group job to communicators. */
           comm->groupJob = ncclGroupJobMainPtr;
           comm = comm->groupNext;
