@@ -3,13 +3,11 @@ import os
 import sys
 
 # Order of redops, tys, protos, algos must match src/include/device.h
-# NOTE: all_collsを編集するとNCCL INFO [Proxy Service UDS] exit: stop 1 abortFlag 0で止まる
-# all_colls =  ["Broadcast","Reduce","AllGather","ReduceScatter","AllReduce","SendRecv"]
 all_colls =  ["AllGather","ReduceScatter"]
 all_redops = ["Sum"]
 all_tys =    ["i8","u8","i32","u32","i64","u64","f16","f32","f64","bf16"]
 all_protos = ["SIMPLE"]
-all_algos =  ["TREE","RING","COLLNET_DIRECT","COLLNET_CHAIN","NVLS","NVLS_TREE","PAT"]
+all_algos =  ["RING","COLLNET_DIRECT"]
 
 ################################################################################
 # The first command line argument is the path to the directory to generate and
@@ -76,11 +74,11 @@ else:
 ################################################################################
 
 algos_of_coll = {
-  "AllGather":     ["RING","COLLNET_DIRECT","NVLS","PAT"],
+  "AllGather":     ["RING","COLLNET_DIRECT"],
   "AllReduce":     ["TREE","RING","COLLNET_DIRECT","COLLNET_CHAIN","NVLS","NVLS_TREE"],
   "Broadcast":     ["RING"],
   "Reduce":        ["RING"],
-  "ReduceScatter": ["RING","COLLNET_DIRECT","NVLS","PAT"],
+  "ReduceScatter": ["RING","COLLNET_DIRECT"],
   "SendRecv":      [None]
 }
 

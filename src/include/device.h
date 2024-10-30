@@ -526,23 +526,19 @@ inline int ncclDevFuncId(int coll, int devRedOp, int type, int algo, int proto) 
   int row;
   do {
     row = 0; // ncclDevFuncIndex_P2p
-    int nAlgos = 4;
+    int nAlgos = 2;
     if (coll == ncclFuncAllGather) {
       int algo1 = algo == NCCL_ALGO_RING ? 0 :
-                  algo == NCCL_ALGO_COLLNET_DIRECT ? 1 :
-                  algo == NCCL_ALGO_NVLS ? 2 :
-                /*algo == NCCL_ALGO_PAT*/ 3;
+                  /* algo == NCCL_ALGO_COLLNET_DIRECT ? */ 1;
       row += algo1*NCCL_NUM_PROTOCOLS + proto;
       break;
     }
     row += nAlgos*NCCL_NUM_PROTOCOLS;
 
-    nAlgos = 4;
+    nAlgos = 2;
     if (coll == ncclFuncReduceScatter) {
       int algo1 = algo == NCCL_ALGO_RING ? 0 :
-                  algo == NCCL_ALGO_COLLNET_DIRECT ? 1 :
-                  algo == NCCL_ALGO_NVLS ? 2 :
-                /*algo == NCCL_ALGO_PAT*/ 3;
+                  /*algo == NCCL_ALGO_COLLNET_DIRECT ? */ 1;
       row += ((devRedOp*NumTypes + type)*nAlgos + algo1)*NCCL_NUM_PROTOCOLS + proto;
       break;
     }
