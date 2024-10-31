@@ -212,7 +212,8 @@ static ncclResult_t commFree(ncclComm_t comm) {
 
   commPoison(comm); // poison comm before free to avoid comm reuse.
   NCCLCHECK(ncclProfilerPluginFinalize(comm));
-  NCCLCHECK(ncclNetFinalize(comm));
+  comm->ncclNet = nullptr;
+  comm->ncclCollNet = nullptr;
   NCCLCHECK(ncclNetPluginUnload(comm));
   free(comm);
 
@@ -488,7 +489,7 @@ static ncclResult_t fillInfo(struct ncclComm* comm, struct ncclPeerInfo* info, u
 
   info->busId = comm->busId;
 
-  NCCLCHECK(ncclGpuGdrSupport(comm, &info->gdrSupport));
+  info->gdrSupport = 1;
   info->comm = comm;
 
   // MNNVL support
